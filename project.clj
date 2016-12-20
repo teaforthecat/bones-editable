@@ -7,10 +7,10 @@
                  [re-frame "0.8.0"]]
 
   :profiles {:dev {
+                   :source-paths ["src" "test" "dev"]
                    :dependencies [[binaryage/devtools "0.8.3"]
-                                  [figwheel-sidecar "0.5.6"]
-                                  ;; needed for nrepl?
-                                  ;; [com.cemerick/piggieback "0.2.1"]
+                                  [figwheel-sidecar "0.5.4-3"]
+                                  [com.cemerick/piggieback "0.2.1"]
                                   ]
                    :plugins [[lein-cljsbuild "1.1.4"]
                              [lein-figwheel "0.5.4-3"]
@@ -23,9 +23,20 @@
         :build "test"}
 
   :cljsbuild {:builds
-              [{:id           "test"
+              [{:id           "dev"
+                 :figwheel {}
+                 :source-paths ["src"]
+                 :compiler     {:asset-path "js/compiled/out"
+                                :output-to "resources/public/js/compiled/bones/editable.js"
+                                :output-dir "resources/public/js/compiled/out"
+                                :source-map-timestamp true
+                                :main          bones.editable
+                                :optimizations :none}}
+               {:id           "test"
+                :figwheel {}
                 :source-paths ["src" "test"]
-                :compiler     {:output-to     "out/test.js"
+                :compiler     {:output-to     "out/test/out.js"
+                               :output-dir    "out/test/"
                                :main          bones.runner
                                :optimizations :none}}
                ]}
