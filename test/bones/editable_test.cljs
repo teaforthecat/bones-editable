@@ -110,7 +110,7 @@
   (testing :request/login
     (async done
            (swap! sys assoc-in [:client :login-fn] #((is (= %1 {:u 1})) (done)))
-           ;; (editable/login (:client @sys) {:u 1} {})
+           (editable/login (:client @sys) {:u 1} {})
 
-           (dispatch [:request/login])
+           ;; (dispatch [:request/login])
            )))
