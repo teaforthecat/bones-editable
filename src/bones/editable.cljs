@@ -5,8 +5,49 @@
 (defprotocol Client
   (login   [client args tap])
   (logout  [client tap])
-  (command [client command args tap])
+  (command [client cmd args tap])
   (query   [client args tap]))
+
+;; helpers
+(defn editable-reset [etype identifier value]
+  [:editable
+   [:editable etype identifier :inputs value]
+   [:editable etype identifier :errors {}]
+   [:editable etype identifier :state {}]])
+
+(defn editable-error [etype identifier error]
+  [:editable
+   [:editable etype identifier :errors error]
+   [:editable etype identifier :state {}]])
+
+(defn editable-response [etype identifier response]
+  (conj (editable-reset etype identifier {})
+        [:editable etype identifier :response response]))
+
+(defn editable-transform
+  "transforms an event vector that will update the db"
+  [evec & attrs]
+  (let [[channel form-type identifier] evec]
+    (into [:editable form-type identifier] attrs)))
+
+(defn editable-update
+  "update the db "
+  [db [channel form-type id & args]]
+  (assoc-in db (into [:editable form-type id] (butlast args)) (last args)))
+
+(defn editable-update-multi
+  "update the db multiple times if a vector of events are given"
+  [db [channel & events]]
+  (if (iterable? (first events))
+    ;; we have multiple events
+    (reduce editable-update db events)
+    ;; single event, reconstruct the event vector
+    (editable-update db (into [channel] events))))
+
+(reg-event-db
+ :editable
+ []
+ editable-update-multi)
 
 (reg-event-db
  :initialize-db
@@ -24,6 +65,12 @@
    (assoc cofx :client (:client @(:sys db)))))
 
 (reg-fx
+ :log
+ println)
+
+;; start request
+
+(reg-fx
  :request/login
  (fn request-login
    [{:keys [client args tap]}]
@@ -39,7 +86,8 @@
  :request/command
  (fn request-command
    [{:keys [client command args tap]}]
-   (command client command args tap)))
+   ;; unfortunate name collision here
+   (bones.editable/command client command args tap)))
 
 (reg-fx
  :request/query
@@ -52,71 +100,163 @@
   [{:keys [db client] :as cofx} [channel form-type identifier opts]]
   ;; TODO: add pre condition
   (if client
-    (if form-type
-      (if identifier
-        (let [{:keys [command tap]} opts
-              ;; this is the editable type specification:
-              {:keys [spec outgoing-spec]
-               :or {outgoing-spec spec}
-               :as editable-type} (get-in db [:editable form-type])
-              ;; this is the user input:
-              inputs (get-in editable-type [identifier :inputs])
-              ]
-          (if (and editable-type inputs)
-            (let [args (s/conform outgoing-spec inputs)]
-              (if (= :cljs.spec/invalid args)
-                ;; put this in the database:
-                {:error (s/explain-data outgoing-spec inputs)}
-                ;; this goes to the server:
-                {:client client
-                 :command command
-                 :args args
-                 :tap tap}))
-            {} ;; no-op
+    (if (= :request/logout channel)
+      ;; there is nothing to send to the server here
+      (let [{:keys [command tap]} opts]
+        {:client client
+         :command (or command :logout)
+         :args {}
+         :tap tap})
+      (if form-type
+        (if identifier
+          (let [{:keys [command tap]} opts
+                ;; this is the editable type specification:
+                {:keys [spec outgoing-spec]
+                 :or {outgoing-spec spec}
+                 :as editable-type} (get-in db [:editable form-type])
+                ;; this is the user input:
+                inputs (get-in editable-type [identifier :inputs])
+                ]
+            (if (empty? editable-type)
+              {:log "editable-type is empty"} ;; no-op
+              (let [args (s/conform outgoing-spec inputs)]
+                (if (= :cljs.spec/invalid args)
+                  ;; put this in the database:
+                  {:error (s/explain-data outgoing-spec inputs)}
+                  ;; this goes to the server:
+                  {:client client
+                   :command command
+                   :args args
+                   :tap tap}))
+              )
             )
+          {:log "identifier is nil"} ;; no-op
           )
-        {} ;; no-op
-        )
-      {} ;; no-op
-      )
-    {} ;; no-op
+        {:log "form-type is nil"} ;; no-op
+        ))
+    {:log "client is nil"} ;; no-op
     ))
 
-(defn command-event
-  "handle form submissions or any event to extract data from the editable
-  components in the db and send it as a command to the server via the
-  client (which is in a co-fx)"
-  [{:keys [db client] :as cofx} [channel form-type identifier opts]]
-  (let [{:keys [spec outgoing-spec]
-         :or {outgoing-spec spec}
-         :as editable-type} (get-in db [:editable form-type])
-        inputs (get-in editable-type [identifier :inputs])
-        args (s/conform outgoing-spec inputs)
-        command (or (:command opts) form-type)] ;; to tricky?
-    (if (= :cljs.spec/invalid args)
-      {:dispatch [:editable/update form-type identifier :state :error (pr-str (:cljs.spec/problems (s/explain-data outgoing-spec inputs)))]}
-      {:request/command {:client client
-                         :command command
-                         :args args
-                         :tap {:form-type form-type
-                               :identifier identifier}}
-       :dispatch [:editable/update form-type identifier :state :sending true]})))
+(defn dispatch-request
+  "dispatch error or make a request and set form state to pending"
+  [channel result form-type identifier]
+  (cond
+    (empty? result)
+    {:log "empty result from `request'"}
 
-(defn editable-update [evec & attrs]
-  (let [[channel form-type identifier] evec]
-    (into [:editable/update form-type identifier] attrs)))
+    (:errors result)
+    {:dispatch (editable-error form-type identifier (:errors result))}
 
-(defn request-login [cofx event-vec]
-  (let [result (request cofx event-vec)]
-    (if (empty? result)
-      ;; missing data, log, blow up?
-      {}
-      (if-let [errors (:errors result)]
-        {:dispatch (editable-update event-vec :state :errors errors)}
-        {:dispatch (editable-update event-vec :state :pending true) ;; multi here to reset errors?
-         :request/login result}))))
+    (:log result)
+    result
 
-(reg-event-fx
- :request/login
- [(re-frame/inject-cofx :client)]
- request-login)
+    :default
+    {:dispatch [:editable form-type identifier :state :pending true]
+     channel result}))
+
+(defn process-request [cofx event-vec]
+  (let [result (request cofx event-vec)
+        [channel form-type identifier] event-vec
+        rrr (dispatch-request channel result form-type identifier)]
+    rrr))
+
+(def middleware [(re-frame/inject-cofx :client)])
+
+;; non-lazy way to register events handlers
+(doseq [channel [:request/login
+                 :request/logout
+                 :request/command
+                 :request/query]]
+ (reg-event-fx channel middleware process-request))
+
+;; start response
+
+(defmulti handler
+   (fn [db [channel revent & [status tap]]]
+    (condp = (namespace channel)
+      "response" [channel status]
+      "event"    channel)))
+
+(defmethod handler :event/message
+  [{:keys [db]} [channel message]]
+  ;; you probably mostly want to write to the database here
+  ;; and have subscribers reacting to changes
+  ;;  {:db (other-multi-method db message) }
+  {:db (update db :messages conj message)})
+
+(defmethod handler :event/client-status
+  [{:keys [db]} [channel message]]
+  (if (contains? message :bones/logged-in?)
+    {:db (assoc db :bones/logged-in? (:bones/logged-in? message))}
+    ;; no other client-status events exist yet
+    {}))
+
+(defmethod handler [:response/login 200]
+  [{:keys [db]} [channel response status tap]]
+  (let [{:keys [form-type identifier]} tap]
+    {:dispatch (editable-reset form-type identifier {})}))
+
+(defmethod handler [:response/login 401]
+  [{:keys [db]} [channel response status tap]]
+  (let [{:keys [form-type identifier]} tap]
+    {:dispatch (editable-error form-type identifier response)}))
+
+(defmethod handler [:response/login 500]
+  [{:keys [db]} [channel response status tap]]
+  (let [{:keys [form-type identifier]} tap]
+    {:dispatch (editable-error form-type identifier response)}))
+
+(defmethod handler [:response/login 0]
+  [{:keys [db]} [channel response status tap]]
+  (let [{:keys [form-type identifier]} tap]
+    {:dispatch [:editable form-type identifier :state :connection "failed to connect"]}))
+
+(defmethod handler [:response/logout 200]
+  [{:keys [db]} [channel response status tap]]
+  (let [{:keys [form-type identifier]} tap]
+    {:dispatch (editable-reset form-type identifier {})}))
+
+(defmethod handler [:response/logout 500]
+  [{:keys [db]} [channel response status tap]]
+  (let [{:keys [form-type identifier]} tap]
+    {:dispatch (editable-error form-type identifier response)}))
+
+(defmethod handler [:response/command 200]
+  [{:keys [db]} [channel response status tap]]
+  (let [{:keys [form-type identifier]} tap]
+    {:dispatch (editable-response form-type identifier response)}))
+
+(defmethod handler [:response/command 401]
+  [{:keys [db]} [channel response status tap]]
+  (let [{:keys [form-type identifier]} tap]
+    {:dispatch (editable-error form-type identifier response)}))
+
+(defmethod handler [:response/command 403]
+  [{:keys [db]} [channel response status tap]]
+  (let [{:keys [form-type identifier]} tap]
+    {:dispatch (editable-error form-type identifier response)}))
+
+(defmethod handler [:response/command 500]
+  [{:keys [db]} [channel response status tap]]
+  (let [{:keys [form-type identifier]} tap]
+    {:dispatch (editable-error form-type identifier response)}))
+
+(defmethod handler [:response/query 200]
+  [{:keys [db]} [channel response status tap]]
+  (let [{:keys [form-type identifier]} tap]
+    {:dispatch (editable-response form-type identifier response)}))
+
+(defmethod handler [:response/query 401]
+  [{:keys [db]} [channel response status tap]]
+  (let [{:keys [form-type identifier]} tap]
+    {:dispatch (editable-error form-type identifier response)}))
+
+(defmethod handler [:response/query 403]
+  [{:keys [db]} [channel response status tap]]
+  (let [{:keys [form-type identifier]} tap]
+    {:dispatch (editable-error form-type identifier response)}))
+
+(defmethod handler [:response/query 500]
+  [{:keys [db]} [channel response status tap]]
+  (let [{:keys [form-type identifier]} tap]
+    {:dispatch (editable-error form-type identifier response)}))
