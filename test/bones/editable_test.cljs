@@ -2,7 +2,7 @@
   (:require-macros [cljs.core.async.macros :refer [go go-loop]])
   (:require [cljs.test :as t :refer-macros [deftest testing is async]]
             [cljs.spec :as s]
-            [re-frame.core :as re-frame :refer [dispatch reg-event-db reg-event-fx reg-fx]]
+            [re-frame.core :as re-frame :refer [dispatch dispatch-sync reg-event-db reg-event-fx reg-fx]]
             [bones.editable :as editable]
             [devtools.core :as devtools]
             [cljs.core.async :as a]) )
@@ -11,6 +11,9 @@
 ;;   (devtools/install!))
 
 (def sys (atom {}))
+
+(defn app-db []
+  @re-frame.db/app-db)
 
 (defrecord TestClient [login-fn logout-fn command-fn query-fn]
   editable/Client
@@ -54,21 +57,23 @@
     (is (= {:log "form-type is nil"} (editable/request {:client {}} [:x nil :y {}]))))
   (testing (str "if there is no data in the db for form-type/identifier,"
                 " an empty(no-op) event is returned")
-    (is (= {:log "editable-type is empty"} (editable/request {:client {} :db {}} [:x :y :z]))))
+    ;; in theory, you could have a command with empty args I guess (?)
+    (is (= {:client {}, :command :y, :args nil, :tap nil}
+           (editable/request {:client {} :db {}} [:x :y :z]))))
 
   (testing (str "if there is data in the db(the component has input data),"
                 "  the event will have :client, :command, :args, :tap")
     (let [cofx {:client {:femur 1} :db {:editable {:y {:z {:inputs {:shaft :triangle}}}}}}]
-      ;; it is ok to not have a command - login, logout, query don't use it
-      (is (= {:client {:femur 1}, :command nil, :args {:shaft :triangle}, :tap nil}
+      ;; command will default to form-type even though login, logout, query don't use it
+      (is (= {:client {:femur 1}, :command :y, :args {:shaft :triangle}, :tap nil}
              (editable/request cofx [:x :y :z {}])))))
   (testing "if there is a spec in the editable component,"
-    (let [cofx {:client {:femur 1} :db {:editable {:y {:spec ::ulna
+    (let [cofx {:client {:femur 1} :db {:editable {:y {:_meta {:spec ::ulna}
                                                        ;;v is the invalid one
                                                        :v {:inputs {:shaft :unicycle}}
                                                        :z {:inputs {:shaft :triangle}}}}}}]
       (testing "and the inputs conform, the inputs will be passed as the args"
-        (is (= {:client {:femur 1}, :command nil, :args {:shaft :triangle}, :tap nil}
+        (is (= {:client {:femur 1}, :command :y, :args {:shaft :triangle}, :tap nil}
                (editable/request cofx [:x :y :z {}]))))
       (testing "and the inputs DONT conform, there will be errors"
         (is (= {:error {:cljs.spec/problems '({:path [:shaft], :pred #{:triangle}, :val :unicycle, :via [:bones.editable-test/ulna :bones.editable-test/shaft], :in [:shaft]})}}
@@ -105,16 +110,17 @@
   (testing "will return no-op event if missing data"
     (is (= {:log "client is nil"} (editable/process-request {} []))))
   (testing "will return error if inputs invalid"
-    (let [cofx {:client {} :db {:editable {:login {:spec ::login
+    (let [cofx {:client {} :db {:editable {:login {:_meta {:spec ::login}
                                                    :new {:inputs {:bob :jones}}}}}}]
       (is (= {:dispatch [:editable :login :new :state :pending true], :request/login {:error {:cljs.spec/problems '({:path [], :pred (contains? % :username), :val {:bob :jones}, :via [:bones.editable-test/login], :in []} {:path [], :pred (contains? % :password), :val {:bob :jones}, :via [:bones.editable-test/login], :in []})}}}
              (editable/process-request cofx [:request/login :login :new])))))
   (testing "will return request if inputs valid"
-    (let [cofx {:client {} :db {:editable {:login {:spec ::login
+    (let [cofx {:client {} :db {:editable {:login {:_meta {:spec ::login}
                                                    :new {:inputs {:username "bob"
                                                                   :password "jones"}}}}}}]
       (is (= {:dispatch [:editable :login :new :state :pending true],
-              :request/login {:client {}, :command nil, :args {:username "bob", :password "jones"}, :tap nil}}
+              ;; command will default to form-type if not given
+              :request/login {:client {}, :command :login, :args {:username "bob", :password "jones"}, :tap nil}}
              (editable/process-request cofx [:request/login :login :new]))))))
 
 
@@ -165,7 +171,7 @@
                        [:response/query 500]])
 
 (deftest response-handler
-  (testing "emits broken events sometimes - fix me"
+  (testing "emits broken events sometimes - "
     (is (= {:dispatch [:editable
                        [:editable nil nil :inputs {}]
                        [:editable nil nil :errors {}]
@@ -175,4 +181,48 @@
     )
   (testing "all combinations of channels and status codes at least return a :dispatch without blowing up"
     (doseq [combo all-combinations]
-      (is (contains? (editable/handler {} (interleave combo [{} {}])) :dispatch)))))
+      (is (contains? (editable/handler {} (interleave combo [{} {}])) :dispatch))))
+  (let [tap {:form-type "x"
+             :identifier "y"}]
+    (testing "login 200"
+      (is (= {:dispatch [:editable
+                         [:editable "x" "y" :inputs {}]
+                         [:editable "x" "y" :errors {}]
+                         [:editable "x" "y" :state {}]]}
+             (editable/handler {} [:response/login {"token" "ok"} 200 tap]))))
+    (testing "login 401"
+      (async done
+       (dispatch (:dispatch
+                  (editable/handler {} [:response/login {:args "something"} 401 tap])))
+       (go (<! (a/timeout 100))
+           (is (= "something" (get-in (app-db) [:editable "x" "y" :errors :args])))
+           (done))))
+    (testing "command 200"
+      (async done
+             (dispatch (:dispatch
+                        (editable/handler {} [:response/command {:a 1} 200 tap])))
+             (go (<! (a/timeout 100))
+                 (is (= {:a 1} (get-in (app-db) [:editable "x" "y" :response])))
+                 (done))))
+    (testing "etc...")) )
+
+
+(deftest subscription
+  (testing "subscribe to single editable thing"
+    (let [db (atom {:editable {:x {:y {:inputs {:z 123}}}}})
+          result (editable/single db [:editable :x :y])]
+      (is (= {:inputs {:z 123}} @result))))
+  (testing "sortable empty list is nil"
+    (is (empty? @(editable/sortable (atom {}) [:editable :x]))))
+
+  ;; NOTE: set sorting with (dispatch [:editable :x :_meta :sort [:z :asc]])
+  (testing "sortable things without a sort attribute set"
+    (let [db (atom {:editable {:x {:_meta {:sort [:z :asc]}
+                                   1 {:inputs {:z 3 :id 1}}
+                                   2 {:inputs {:z 1 :id 2}}
+                                   3 {:inputs {:z 2 :id 3}}}}})
+          result (vec @(editable/sortable db [:editable :x]))]
+      ;; the order is by :z not :id
+      (is (= 2 (get-in result [0 :inputs :id])))
+      (is (= 3 (get-in result [1 :inputs :id])))
+      (is (= 1 (get-in result [2 :inputs :id]))))))
