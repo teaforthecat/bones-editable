@@ -1,11 +1,11 @@
-(defproject bones/editable "0.1.0-SNAPSHOT"
+(defproject bones/editable "0.1.0"
   :description "lifecycle events for forms using re-frame"
   :url "https://github.com/teaforthecat/bones-editable"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.8.0"]
                  [org.clojure/clojurescript "1.9.229"]
-                 [re-frame "0.8.0"]]
+                 [re-frame "0.9.1"]]
 
   :profiles {:dev {
                    :source-paths ["src" "test" "dev"]

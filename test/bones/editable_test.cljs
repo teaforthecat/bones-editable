@@ -7,10 +7,6 @@
             [devtools.core :as devtools]
             [cljs.core.async :as a]) )
 
-;; (when js/goog.DEBUG
-;;   (devtools/install!))
-
-(def sys (atom {}))
 
 (defn app-db []
   @re-frame.db/app-db)
@@ -22,13 +18,13 @@
   (command [client cmd args tap] (command-fn cmd args tap))
   (query   [client args tap] (query-fn args tap)))
 
-(swap! sys assoc :client (map->TestClient {:login-fn identity
-                                           :logout-fn identity
-                                           :command-fn identity
-                                           :query-fn identity}))
+(def client (map->TestClient {:login-fn identity
+                              :logout-fn identity
+                              :command-fn identity
+                              :query-fn identity}))
 
-;; is there a better way to make the client available via cofx than this?
-(re-frame/dispatch-sync [:initialize-db sys {}])
+
+(editable/set-client client)
 
 (reg-event-fx
  :test-event-fx
@@ -38,7 +34,7 @@
    (done)
    {}))
 
-(deftest build-system
+(deftest client-cofx
   (testing "a client is accessible on the :client cofx"
     ;; initialize-db sets the sys, which should contain the :client
     (async done
@@ -58,14 +54,15 @@
   (testing (str "if there is no data in the db for form-type/identifier,"
                 " an empty(no-op) event is returned")
     ;; in theory, you could have a command with empty args I guess (?)
-    (is (= {:client {}, :command :y, :args nil, :tap nil}
+    ;; the form-type and identifier can be used to update the editable thing
+    (is (= {:client {}, :command :y, :args nil, :tap {:form-type :y :identifier :z}}
            (editable/request {:client {} :db {}} [:x :y :z]))))
 
   (testing (str "if there is data in the db(the component has input data),"
                 "  the event will have :client, :command, :args, :tap")
     (let [cofx {:client {:femur 1} :db {:editable {:y {:z {:inputs {:shaft :triangle}}}}}}]
       ;; command will default to form-type even though login, logout, query don't use it
-      (is (= {:client {:femur 1}, :command :y, :args {:shaft :triangle}, :tap nil}
+      (is (= {:client {:femur 1}, :command :y, :args {:shaft :triangle}, :tap {:form-type :y :identifier :z}}
              (editable/request cofx [:x :y :z {}])))))
   (testing "if there is a spec in the editable component,"
     (let [cofx {:client {:femur 1} :db {:editable {:y {:_meta {:spec ::ulna}
@@ -73,14 +70,14 @@
                                                        :v {:inputs {:shaft :unicycle}}
                                                        :z {:inputs {:shaft :triangle}}}}}}]
       (testing "and the inputs conform, the inputs will be passed as the args"
-        (is (= {:client {:femur 1}, :command :y, :args {:shaft :triangle}, :tap nil}
+        (is (= {:client {:femur 1}, :command :y, :args {:shaft :triangle}, :tap {:form-type :y :identifier :z}}
                (editable/request cofx [:x :y :z {}]))))
       (testing "and the inputs DONT conform, there will be errors"
         (is (= {:error {:cljs.spec/problems '({:path [:shaft], :pred #{:triangle}, :val :unicycle, :via [:bones.editable-test/ulna :bones.editable-test/shaft], :in [:shaft]})}}
                (editable/request cofx [:x :y :v {}]))))))
-  (testing "adding command and tap"
+  (testing "added command and tap values get passed along"
     (let [cofx {:client {:femur 1} :db {:editable {:y {:z {:inputs {:shaft :triangle}}}}}}]
-      (is (= {:client {:femur 1}, :command :connect, :args {:shaft :triangle}, :tap {:n 5}}
+      (is (= {:client {:femur 1}, :command :connect, :args {:shaft :triangle}, :tap {:form-type :y :identifier :z :n 5}}
              (editable/request cofx [:x :y :z {:command :connect :tap {:n 5}}])))))
   )
 
@@ -120,16 +117,19 @@
                                                                   :password "jones"}}}}}}]
       (is (= {:dispatch [:editable :login :new :state :pending true],
               ;; command will default to form-type if not given
-              :request/login {:client {}, :command :login, :args {:username "bob", :password "jones"}, :tap nil}}
+              :request/login {:client {}, :command :login, :args {:username "bob", :password "jones"}, :tap {:form-type :login :identifier :new}}}
              (editable/process-request cofx [:request/login :login :new]))))))
 
+(defn update-client [attr func]
+  (swap! editable/client-atom assoc attr func))
 
 (deftest call-the-client
   (testing :request/login
     (async done
            ;; the client will expect args {:u 1} to send to the server
-           (swap! sys assoc-in [:client :login-fn] #((is (= %1 {:u 1})) (done)))
-           ;; this is what gets called in the dispatched fx via the the middleware
+           (update-client :login-fn #((is (= %1 {:u 1})) (done)))
+
+           ;; this is what gets called in the dispatched fx
            ;; (editable/login (:client @sys) {:u 1} {})
 
            ;; the inputs of the form are the args to send to the client
@@ -138,19 +138,23 @@
            (dispatch [:request/login :login-form :new])))
   (testing :request/logout
     (async done
-           (swap! sys assoc-in [:client :logout-fn] (fn [tap]
-                                                      (is (= {:anything "this is"} tap))
-                                                      (done)))
+           (update-client :logout-fn (fn [tap]
+                                       (is (= {:form-type :some-type
+                                               :identifier :number123
+                                               :anything "this is"} tap))
+                                       (done)))
            ;; all buttons have life-cycles (and this is the required shape of the event)
            (dispatch [:request/logout :buttons :logout {:tap {:anything "this is"}}])))
   (testing :request/command
     (async done
-           (swap! sys assoc-in [:client :command-fn] (fn [command args tap]
-                                                       (is (= :some-command command))
-                                                       (is (= {:calcium 123} args))
-                                                       (is (= {:anything "this is"} tap))
-                                                       (done)
-                                                       ))
+           (update-client :command-fn (fn [command args tap]
+                                        (is (= :some-command command))
+                                        (is (= {:calcium 123} args))
+                                        (is (= {:form-type :some-type
+                                                :identifier :number123
+                                                :anything "this is"} tap))
+                                        (done)
+                                        ))
            (dispatch [:editable :some-type :number123 :inputs {:calcium 123}])
            (dispatch [:request/command :some-type :number123 {:command :some-command :tap {:anything "this is"}}]))))
 

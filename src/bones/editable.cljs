@@ -1,6 +1,8 @@
 (ns bones.editable
   (:require-macros [reagent.ratom :refer [reaction]])
-  (:require [re-frame.core :as re-frame :refer [reg-event-db reg-event-fx reg-fx reg-cofx]]
+  (:require
+   ;; [re-frame.core :as re-frame :refer [reg-event-db reg-event-fx reg-fx reg-cofx]]
+   [re-frame.core :as re-frame]
             [cljs.spec :as s]))
 
 (defprotocol Client
@@ -9,10 +11,25 @@
   (command [client cmd args tap])
   (query   [client args tap]))
 
+
+(def debug (if js/goog.DEBUG re-frame/debug))
+
+(defn reg-event-db [name interceptors func]
+  (re-frame/reg-event-db name (into [debug] interceptors) func))
+
+(defn reg-event-fx [name interceptors func]
+  (re-frame/reg-event-fx name (into [debug] interceptors) func))
+
+(defn reg-fx [name func]
+  (re-frame/reg-fx name func))
+
+(defn reg-cofx [name func]
+  (re-frame/reg-cofx name func))
+
 ;; helpers
-(defn editable-reset [etype identifier value]
+(defn editable-reset [etype identifier inputs]
   [:editable
-   [:editable etype identifier :inputs value]
+   [:editable etype identifier :inputs inputs]
    [:editable etype identifier :errors {}]
    [:editable etype identifier :state {}]])
 
@@ -21,9 +38,12 @@
    [:editable etype identifier :errors error]
    [:editable etype identifier :state {}]])
 
-(defn editable-response [etype identifier response]
-  (conj (editable-reset etype identifier {})
-        [:editable etype identifier :response response]))
+(defn editable-response
+  ([etype identifier response]
+   (editable-response etype identifier response {}))
+  ([etype identifier response inputs]
+   (conj (editable-reset etype identifier inputs)
+         [:editable etype identifier :response response])))
 
 (defn editable-transform
   "transforms an event vector that will update the db"
@@ -32,7 +52,9 @@
     (into [:editable form-type identifier] attrs)))
 
 (defn editable-update
-  "update the db "
+  "update the editable thing in the db,
+   the attribute is second to last in the event vector,
+   the value is last"
   [db [channel form-type id & args]]
   (assoc-in db (into [:editable form-type id] (butlast args)) (last args)))
 
@@ -45,59 +67,53 @@
     ;; single event, reconstruct the event vector
     (editable-update db (into [channel] events))))
 
-(reg-event-db
- :editable
- []
- editable-update-multi)
+(reg-event-db :editable [] editable-update-multi)
 
-(reg-event-db
- :initialize-db
- (fn [_ [channel sys default-db]]
-   (merge default-db
-          {:sys sys})))
+(def client-atom (atom {}))
 
-;; it is important to discern between this top-level "compile-time" vs
-;; the "runtime" of the `deref'. This means the page can load, but the first
-;; event that happens needs be the one that initializes the sys in the db,
-;; the :initialize-db. Maybe this event could belong to the user
-(reg-cofx
- :client
- (fn [{:keys [db] :as cofx} _]
-   (assoc cofx :client (:client @(:sys db)))))
+(defn set-client [client]
+  (if (satisfies? Client client)
+    (reset! client-atom client)
+    (throw (ex-info "client does not satisfy bones.editable/Client" {:client client}))))
 
-(reg-fx
- :log
- println)
+(defn client-cofx [{:keys [db] :as cofx} _]
+  (assoc cofx :client @client-atom))
+
+(reg-cofx :client client-cofx)
+
+(reg-fx :log println)
 
 ;; start request
 
-(reg-fx
- :request/login
- (fn request-login
-   [{:keys [client args tap]}]
-   (login client args tap)))
+(defn request-login
+  [{:keys [client args tap]}]
+  (login client args tap))
 
-(reg-fx
- :request/logout
- (fn request-logout
-   [{:keys [client tap]}]
-   (logout client tap)))
+(reg-fx :request/login request-login)
 
-(reg-fx
- :request/command
- (fn request-command
-   [{:keys [client command args tap]}]
-   ;; unfortunate name collision here
-   (bones.editable/command client command args tap)))
+(defn request-logout
+  [{:keys [client tap]}]
+  (logout client tap))
 
-(reg-fx
- :request/query
- (fn request-query
-   [{:keys [client params tap]}]
-   (query client params tap)))
+(reg-fx :request/logout request-logout)
+
+(defn request-command
+  [{:keys [client command args tap]}]
+  ;; unfortunate name collision here
+  (bones.editable/command client command args tap))
+
+(reg-fx :request/command request-command)
+
+(defn request-query
+  [{:keys [client params tap]}]
+  (query client params tap))
+
+(reg-fx :request/query request-query)
 
 (defn request
-  "builds a data structure to send to :request/* fx"
+  "get the inputs from the db,
+   conform to spec if there is one,
+   and build a data structure to send to :request/* fx"
   [{:keys [db client] :as cofx} [channel form-type identifier opts]]
   (cond
     (nil? client)
@@ -119,7 +135,10 @@
     :ok
     (let [{:keys [command tap]
            :or {command form-type}} opts
-          ;; this is the editable type specification:
+          ;; form-type and identifier are needed by the response handler to
+          ;; update the thing in the db
+          more-tap (merge tap {:form-type form-type :identifier identifier})
+          ;; this is the specification for the editable thing:
           {:keys [spec outgoing-spec]
            :or {outgoing-spec spec}
            :as list-meta} (get-in db [:editable form-type :_meta])
@@ -136,39 +155,35 @@
           {:client client
            :command command
            :args args
-           :tap tap})))))
+           :tap more-tap})))))
 
 (defn dispatch-request
   "dispatch error or make a request and set form state to pending"
   [channel result form-type identifier]
   (cond
-    (empty? result)
-    {:log "empty result from `request'"}
-
     (:errors result)
     {:dispatch (editable-error form-type identifier (:errors result))}
 
     (:log result)
     result
 
-    :default
+    :ok
     {:dispatch [:editable form-type identifier :state :pending true]
      channel result}))
 
 (defn process-request [cofx event-vec]
   (let [result (request cofx event-vec)
-        [channel form-type identifier] event-vec
-        rrr (dispatch-request channel result form-type identifier)]
-    rrr))
+        [channel form-type identifier] event-vec]
+    (dispatch-request channel result form-type identifier)))
 
-(def middleware [(re-frame/inject-cofx :client)])
+(def request-interceptors [(re-frame/inject-cofx :client)])
 
 ;; non-lazy way to register events handlers
 (doseq [channel [:request/login
                  :request/logout
                  :request/command
                  :request/query]]
- (reg-event-fx channel middleware process-request))
+ (reg-event-fx channel request-interceptors process-request))
 
 ;; start response
 
@@ -193,8 +208,7 @@
   [{:keys [db]} [channel message]]
   (if (contains? message :bones/logged-in?)
     {:db (assoc db :bones/logged-in? (:bones/logged-in? message))}
-    ;; no other client-status events exist yet
-    {}))
+    {:log (str "unknown :event/client-status: " message)}))
 
 (defmethod handler [:response/login 200]
   [{:keys [db]} [channel response status tap]]
@@ -302,8 +316,11 @@
   (let [form-type (second event-vec)
         sorting (reaction (get-in @db (conj event-vec :_meta :sort)))
         things (reaction (dissoc (get-in @db event-vec)
-                                 :_meta))]
-    (reaction (sort-fn @sorting @things))))
+                                 :_meta
+                                 :new))]
+    (reaction (if @sorting
+                (sort-fn @sorting @things)
+                @things))))
 
 (defn single [db event-vec]
   (reaction (get-in @db event-vec)))
