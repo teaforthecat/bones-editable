@@ -81,7 +81,7 @@
              (editable/request cofx [:x :y :z {:command :connect :tap {:n 5}}])))))
   (testing "if tap has :defaults they merge into inputs"
     (let [cofx {:client "[the client]" :db {:editable {:y {:z {:inputs {:shaft :triangle}}}}}}]
-      (is (= {:client "[the client]", :command :connect, :args {:shaft :triangle :m 5}, :tap {:defaults {:m 5}}}
+      (is (= {:client "[the client]", :command :connect, :args {:shaft :triangle :m 5}, :tap {:defaults {:m 5} :form-type :y :identifier :z}}
              (editable/request cofx [:x :y :z {:command :connect :tap {:defaults {:m 5}}}])))))
   )
 
