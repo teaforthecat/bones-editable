@@ -1,16 +1,8 @@
 (ns bones.editable
   (:require-macros [reagent.ratom :refer [reaction]])
-  (:require
-   ;; [re-frame.core :as re-frame :refer [reg-event-db reg-event-fx reg-fx reg-cofx]]
-   [re-frame.core :as re-frame]
+  (:require [cljs.reader :refer [read-string]]
+            [re-frame.core :as re-frame]
             [cljs.spec :as s]))
-
-(defprotocol Client
-  (login   [client args tap])
-  (logout  [client tap])
-  (command [client cmd args tap])
-  (query   [client args tap]))
-
 
 (def debug (if js/goog.DEBUG re-frame/debug))
 
@@ -26,6 +18,91 @@
 (defn reg-cofx [name func]
   (re-frame/reg-cofx name func))
 
+(defn dispatch [eventv]
+  (re-frame/dispatch eventv))
+
+(comment
+;; start editable
+(s/def ::inputs map?)
+(s/def ::errors map?)
+(s/def ::state map?)
+(s/def ::defaults map?)
+(s/def ::response map?)
+(s/def ::formable (s/keys :opt-un [::inputs ::errors ::state ::response ::defaults]))
+(s/def ::unique-thing-id (s/or :s string? :k keyword? :i integer? :u uuid?))
+(s/def ::identifier (s/every-kv ::unique-thing-id ::formable))
+(s/def ::form-type (s/or :s string? :k keyword? :i integer?))
+(s/def ::editable (s/nilable (s/every-kv ::form-type ::identifier )))
+
+  (s/exercise ::unique-thing-id)
+  ;; top level is nilable so no data is required to start
+  ;; goes like this:
+  ;; get-in db [editable form-type identifier :inputs]
+  ;; get-in db [:editable :x :y :inputs :z]
+  (s/conform ::editable {:x {:y {:inputs {:z 123}}}})
+  (s/explain ::editable {:x {:y nil}})
+
+  )
+;; end editable
+
+
+
+(defprotocol Client
+  (login   [client args tap])
+  (logout  [client tap])
+  (command [client cmd args tap])
+  (query   [client args tap]))
+
+(defn local-key [prefix form-type]
+  ;; use name in case keywords are provided
+  (str (name prefix) "-" (name form-type)))
+
+(defn local-get-item [prefix form-type]
+  (if-let [result (.getItem js/localStorage (local-key prefix form-type))]
+    (read-string result)))
+
+(defn local-set-item [prefix form-type value]
+  (.setItem js/localStorage (local-key prefix form-type) (pr-str value)))
+
+(defrecord LocalStorage [prefix]
+  Client
+  (login [client args tap]
+    (dispatch [:response/login {:fake true} 200 tap]))
+  (logout [client tap]
+    (dispatch [:response/logout {:fake true} 200 tap]))
+  (command [client cmd args tap]
+    (let [thing {:inputs (update args :id (fnil identity (random-uuid)))}
+          id (get-in thing [:inputs :id]) ;; used as identifier _and_ attribute
+          cmdspace (or (namespace cmd) (:form-type tap))
+          action (name cmd)
+          things (local-get-item prefix cmdspace)]
+
+      (local-set-item prefix cmdspace
+                      (if (some #{"new" "update"} #{action})
+                        (assoc things id thing)
+                        (dissoc things id)))
+      (dispatch [:response/command
+                 ;; args in the response means update the editable thing's inputs
+                 {:args (:inputs thing)
+                  :command cmd}
+                 ;; response status
+                 200
+                 tap])))
+  (query [client args tap]
+    (let [{:keys [form-type]} args
+          things (local-get-item prefix form-type)]
+      (dispatch [:response/query {:results things} 200 tap]))))
+
+(comment
+
+  (local-get-item "bones" "todos")
+  (str "bones" (name "todos"))
+  (str "bones" "-" (name :todos))
+
+
+
+
+  )
 ;; helpers
 (defn editable-reset [etype identifier inputs]
   [:editable
@@ -133,6 +210,9 @@
        :tap tap})
 
     :ok
+    ;; maybe if form-type has a namespace, use that as the command
+    ;; and the namespace as the form-type
+    ;; maybe merge the defaults from the tap here???????
     (let [{:keys [command tap]
            :or {command form-type}} opts
           ;; form-type and identifier are needed by the response handler to
@@ -142,15 +222,17 @@
           {:keys [spec outgoing-spec]
            :or {outgoing-spec spec}
            :as list-meta} (get-in db [:editable form-type :_meta])
+          defaults (:defaults tap)
           ;; this is the user input:
           inputs (get-in db [:editable form-type identifier :inputs])
+          inputs-defaults (merge defaults inputs)
           ]
       ;; it seems weird but a request with empty args is possible
       ;; both outgoing-spec and inputs can be nil
-      (let [args (s/conform outgoing-spec inputs)]
+      (let [args (s/conform outgoing-spec inputs-defaults)]
         (if (= :cljs.spec/invalid args)
           ;; put this in the database:
-          {:error (s/explain-data outgoing-spec inputs)}
+          {:error (s/explain-data outgoing-spec inputs-defaults)}
           ;; this goes to the server:
           {:client client
            :command command
@@ -243,6 +325,7 @@
 (defmethod handler [:response/command 200]
   [{:keys [db]} [channel response status tap]]
   (let [{:keys [form-type identifier]} tap]
+    ;; (response-command response status tap) ;;......multi
     {:dispatch (editable-response form-type identifier response)}))
 
 (defmethod handler [:response/command 401]
@@ -280,7 +363,6 @@
   (let [{:keys [form-type identifier]} tap]
     {:dispatch (editable-error form-type identifier response)}))
 
-
 (defn handler-channels []
   (set  (map (fn [[dispatch-value]]
                (if (vector? dispatch-value)
@@ -292,10 +374,12 @@
 
 ;; hook up the response handlers
 (doseq [channel (handler-channels)]
-  (reg-event-fx channel [] handler))
+  (reg-event-fx channel [debug] handler))
 
 
 ;; subscriptions
+
+;; consider simple filter k/v function
 
 (re-frame/reg-sub-raw
  :bones/logged-in?

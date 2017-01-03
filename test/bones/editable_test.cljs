@@ -60,25 +60,29 @@
 
   (testing (str "if there is data in the db(the component has input data),"
                 "  the event will have :client, :command, :args, :tap")
-    (let [cofx {:client {:femur 1} :db {:editable {:y {:z {:inputs {:shaft :triangle}}}}}}]
+    (let [cofx {:client "[the client]" :db {:editable {:y {:z {:inputs {:shaft :triangle}}}}}}]
       ;; command will default to form-type even though login, logout, query don't use it
-      (is (= {:client {:femur 1}, :command :y, :args {:shaft :triangle}, :tap {:form-type :y :identifier :z}}
+      (is (= {:client "[the client]", :command :y, :args {:shaft :triangle}, :tap {:form-type :y :identifier :z}}
              (editable/request cofx [:x :y :z {}])))))
   (testing "if there is a spec in the editable component,"
-    (let [cofx {:client {:femur 1} :db {:editable {:y {:_meta {:spec ::ulna}
+    (let [cofx {:client "[the client]" :db {:editable {:y {:_meta {:spec ::ulna}
                                                        ;;v is the invalid one
                                                        :v {:inputs {:shaft :unicycle}}
                                                        :z {:inputs {:shaft :triangle}}}}}}]
       (testing "and the inputs conform, the inputs will be passed as the args"
-        (is (= {:client {:femur 1}, :command :y, :args {:shaft :triangle}, :tap {:form-type :y :identifier :z}}
+        (is (= {:client "[the client]", :command :y, :args {:shaft :triangle}, :tap {:form-type :y :identifier :z}}
                (editable/request cofx [:x :y :z {}]))))
       (testing "and the inputs DONT conform, there will be errors"
         (is (= {:error {:cljs.spec/problems '({:path [:shaft], :pred #{:triangle}, :val :unicycle, :via [:bones.editable-test/ulna :bones.editable-test/shaft], :in [:shaft]})}}
                (editable/request cofx [:x :y :v {}]))))))
   (testing "added command and tap values get passed along"
-    (let [cofx {:client {:femur 1} :db {:editable {:y {:z {:inputs {:shaft :triangle}}}}}}]
-      (is (= {:client {:femur 1}, :command :connect, :args {:shaft :triangle}, :tap {:form-type :y :identifier :z :n 5}}
+    (let [cofx {:client "[the client]" :db {:editable {:y {:z {:inputs {:shaft :triangle}}}}}}]
+      (is (= {:client "[the client]", :command :connect, :args {:shaft :triangle}, :tap {:form-type :y :identifier :z :n 5}}
              (editable/request cofx [:x :y :z {:command :connect :tap {:n 5}}])))))
+  (testing "if tap has :defaults they merge into inputs"
+    (let [cofx {:client "[the client]" :db {:editable {:y {:z {:inputs {:shaft :triangle}}}}}}]
+      (is (= {:client "[the client]", :command :connect, :args {:shaft :triangle :m 5}, :tap {:defaults {:m 5}}}
+             (editable/request cofx [:x :y :z {:command :connect :tap {:defaults {:m 5}}}])))))
   )
 
 (deftest editable-update
