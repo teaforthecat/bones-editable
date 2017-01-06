@@ -66,23 +66,25 @@
              (editable/request cofx [:x :y :z {}])))))
   (testing "if there is a spec in the editable component,"
     (let [cofx {:client "[the client]" :db {:editable {:y {:_meta {:spec ::ulna}
-                                                       ;;v is the invalid one
-                                                       :v {:inputs {:shaft :unicycle}}
-                                                       :z {:inputs {:shaft :triangle}}}}}}]
+                                                           ;; v is the invalid one
+                                                           :v {:inputs {:shaft :unicycle}}
+                                                           ;; z conforms
+                                                           :z {:inputs {:shaft :triangle}}}}}}]
       (testing "and the inputs conform, the inputs will be passed as the args"
-        (is (= {:client "[the client]", :command :y, :args {:shaft :triangle}, :tap {:form-type :y :identifier :z}}
-               (editable/request cofx [:x :y :z {}]))))
-      (testing "and the inputs DONT conform, there will be errors"
-        (is (= {:error {:cljs.spec/problems '({:path [:shaft], :pred #{:triangle}, :val :unicycle, :via [:bones.editable-test/ulna :bones.editable-test/shaft], :in [:shaft]})}}
-               (editable/request cofx [:x :y :v {}]))))))
+        (is (= {:client "[the client]", :command :y/w, :args {:shaft :triangle, :id :z}, :tap {:form-type :y :identifier :z}}
+               (editable/request cofx [:x :y/w {:id :z} {}]))))
+      (testing "and if the inputs DONT conform, there will be errors"
+        (is (= {:error {:cljs.spec/problems '({:path [:shaft], :pred #{:triangle}, :val :unicycle, :via [:bones.editable-test/ulna :bones.editable-test/shaft], :in [:shaft]})}
+                :tap {:form-type :y :identifier :v}}
+               (editable/request cofx [:x :y/w {:id :v} {}]))))))
   (testing "added command and tap values get passed along"
     (let [cofx {:client "[the client]" :db {:editable {:y {:z {:inputs {:shaft :triangle}}}}}}]
-      (is (= {:client "[the client]", :command :connect, :args {:shaft :triangle}, :tap {:form-type :y :identifier :z :n 5}}
-             (editable/request cofx [:x :y :z {:command :connect :tap {:n 5}}])))))
+      (is (= {:client "[the client]", :command :connect, :args {:shaft :triangle :id :z}, :tap {:form-type :y :identifier :z :n 5}}
+             (editable/request cofx [:x :connect {:id :z} {:form-type :y :tap {:n 5}}])))))
   (testing "if tap has :defaults they merge into inputs"
     (let [cofx {:client "[the client]" :db {:editable {:y {:z {:inputs {:shaft :triangle}}}}}}]
-      (is (= {:client "[the client]", :command :connect, :args {:shaft :triangle :m 5}, :tap {:defaults {:m 5} :form-type :y :identifier :z}}
-             (editable/request cofx [:x :y :z {:command :connect :tap {:defaults {:m 5}}}])))))
+      (is (= {:client "[the client]", :command :connect, :args {:shaft :triangle :m 5 :id :z}, :tap {:defaults {:m 5} :form-type :y :identifier :z}}
+             (editable/request cofx [:x :connect {:id :z} {:form-type :y :tap {:defaults {:m 5}}}])))))
   )
 
 (deftest editable-update
@@ -113,7 +115,7 @@
   (testing "will return error if inputs invalid"
     (let [cofx {:client {} :db {:editable {:login {:_meta {:spec ::login}
                                                    :new {:inputs {:bob :jones}}}}}}]
-      (is (= {:dispatch [:editable :login :new :state :pending true], :request/login {:error {:cljs.spec/problems '({:path [], :pred (contains? % :username), :val {:bob :jones}, :via [:bones.editable-test/login], :in []} {:path [], :pred (contains? % :password), :val {:bob :jones}, :via [:bones.editable-test/login], :in []})}}}
+      (is (= {:dispatch [:editable :login :new :state :pending true], :request/login {:error {:cljs.spec/problems '({:path [], :pred (contains? % :username), :val {:bob :jones}, :via [:bones.editable-test/login], :in []} {:path [], :pred (contains? % :password), :val {:bob :jones}, :via [:bones.editable-test/login], :in []})} :tap {:form-type :login :identifier :new}}}
              (editable/process-request cofx [:request/login :login :new])))))
   (testing "will return request if inputs valid"
     (let [cofx {:client {} :db {:editable {:login {:_meta {:spec ::login}
@@ -122,7 +124,7 @@
       (is (= {:dispatch [:editable :login :new :state :pending true],
               ;; command will default to form-type if not given
               :request/login {:client {}, :command :login, :args {:username "bob", :password "jones"}, :tap {:form-type :login :identifier :new}}}
-             (editable/process-request cofx [:request/login :login :new]))))))
+             (editable/process-request cofx [:request/login :login {} {:identifier :new :form-type :login}]))))))
 
 (defn update-client [attr func]
   (swap! editable/client-atom assoc attr func))
@@ -160,7 +162,7 @@
                                         (done)
                                         ))
            (dispatch [:editable :some-type :number123 :inputs {:calcium 123}])
-           (dispatch [:request/command :some-type :number123 {:command :some-command :tap {:anything "this is"}}]))))
+           (dispatch [:request/command :some-command :number123 {:form-type :some-type :tap {:anything "this is"}}]))))
 
 
 (def all-combinations [[:response/login 200]

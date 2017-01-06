@@ -191,17 +191,23 @@
   "get the inputs from the db,
    conform to spec if there is one,
    and build a data structure to send to :request/* fx"
-  [{:keys [db client] :as cofx} [channel form-type identifier opts]]
+  [{:keys [db client] :as cofx} [channel command partial-args opts]]
   (cond
     (nil? client)
     {:log "client is nil"} ;; no-op
 
-    (nil? form-type)
+    (nil? (or (and command (namespace command))
+              (:form-type opts)
+              command))
     {:log "form-type is nil"} ;; no-op
 
-    (nil? identifier)
+    (nil? (or (and (map? partial-args) (:id partial-args))
+              (:identifier opts)
+              ;; must be an :identifier like :new or just an id
+              partial-args))
     {:log "identifier is nil"} ;; no-op
 
+    ;; maybe this can be in another function
     (= :request/logout channel)
     (let [{:keys [command tap]} opts]
       {:client client
@@ -213,8 +219,14 @@
     ;; maybe if form-type has a namespace, use that as the command
     ;; and the namespace as the form-type
     ;; maybe merge the defaults from the tap here???????
-    (let [{:keys [command tap]
-           :or {command form-type}} opts
+    (let [{:keys [tap]} opts
+          form-type (keyword (or (and command (namespace command))
+                                 (:form-type opts)
+                                 command))
+          identifier (or (and (map? partial-args) (:id partial-args))
+                         (:identifier opts)
+                         ;; must be an :identifier like :new or just an id
+                         partial-args)
           ;; form-type and identifier are needed by the response handler to
           ;; update the thing in the db
           more-tap (merge tap {:form-type form-type :identifier identifier})
@@ -225,14 +237,18 @@
           defaults (:defaults tap)
           ;; this is the user input:
           inputs (get-in db [:editable form-type identifier :inputs])
-          inputs-defaults (merge defaults inputs)
+          ;; partial-args will needlessly overwrite the :id in :inputs, but oh well
+          ;; partial-args should overwrite what is in the db, and update the db
+          ;; in the response handler
+          inputs-defaults (merge defaults inputs (if (map? partial-args) partial-args))
           ]
       ;; it seems weird but a request with empty args is possible
       ;; both outgoing-spec and inputs can be nil
       (let [args (s/conform outgoing-spec inputs-defaults)]
         (if (= :cljs.spec/invalid args)
           ;; put this in the database:
-          {:error (s/explain-data outgoing-spec inputs-defaults)}
+          {:error (s/explain-data outgoing-spec inputs-defaults)
+           :tap more-tap}
           ;; this goes to the server:
           {:client client
            :command command
@@ -255,7 +271,8 @@
 
 (defn process-request [cofx event-vec]
   (let [result (request cofx event-vec)
-        [channel form-type identifier] event-vec]
+        {:keys [form-type identifier]} (get-in result [:tap])
+        [channel] event-vec]
     (dispatch-request channel result form-type identifier)))
 
 (def request-interceptors [(re-frame/inject-cofx :client)])
