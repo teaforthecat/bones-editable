@@ -77,7 +77,9 @@
   (logout [client tap]
     (dispatch [:response/logout {:fake true} 200 tap]))
   (command [client cmd args tap]
-    (let [thing {:inputs (update args :id (fnil identity (random-uuid)))}
+    (let [ ;; all args get an id because this is the happy path :)
+          args-given-id (update args :id (fnil identity (random-uuid)))
+          thing {:inputs args-given-id}
           id (get-in thing [:inputs :id]) ;; used as identifier _and_ attribute
           cmdspace (or (namespace cmd) (:form-type tap))
           action (name cmd)
@@ -90,11 +92,14 @@
                         "update"
                         (update-in things [id :inputs] merge args)
                         "delete"
-                        (dissoc things id)))
+                        (dissoc things id)
+                        "delete-many"
+                        (reduce dissoc things (:ids args))))
       (dispatch [:response/command
                  ;; args in the response means update the editable thing's inputs
-                 {:args (:inputs thing)
-                  :command cmd}
+                 ;; it will be weird to see that the delete-many args have been
+                 ;; assigned an id, but oh well - it won't be used
+                 {:args args-given-id :command cmd}
                  ;; response status
                  200
                  tap])))
@@ -327,7 +332,9 @@
           ;; in the response handler
           ;; don't merge inputs from the if :solo - only send the given
           ;; attributes in the event vector
-          inputs-defaults (merge defaults (if solo {} inputs) (if (map? partial-args) partial-args))
+          inputs-defaults (merge defaults
+                                 (if solo {} inputs)
+                                 (if (map? partial-args) partial-args))
           ]
       ;; it seems weird but a request with empty args is possible
       ;; both outgoing-spec and inputs can be nil
@@ -353,8 +360,11 @@
     result
 
     :ok
-    {:dispatch [:editable form-type identifier :state :pending true]
-     channel result}))
+    (if (not (map? identifier))
+      {:dispatch [:editable form-type identifier :state :pending true]
+       channel result}
+      ;; else identifier must be a bulk or unique request, this needs some work
+      {channel result})))
 
 (defn process-request [cofx event-vec]
   (let [result (request cofx event-vec)
