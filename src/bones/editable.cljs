@@ -21,6 +21,12 @@
 (defn dispatch [eventv]
   (re-frame/dispatch eventv))
 
+(defn dispatch-sync [eventv]
+  (re-frame/dispatch-sync eventv))
+
+(defn subscribe [eventv]
+  (re-frame/subscribe eventv))
+
 (comment
 ;; start editable
 (s/def ::inputs map?)
@@ -85,7 +91,6 @@
                         (update-in things [id :inputs] merge args)
                         "delete"
                         (dissoc things id)))
-      ;; (go (<! (a/timeout 10)))
       (dispatch [:response/command
                  ;; args in the response means update the editable thing's inputs
                  {:args (:inputs thing)
@@ -97,6 +102,32 @@
     (let [{:keys [form-type]} args
           things (local-get-item prefix form-type)]
       (dispatch [:response/query {:results things} 200 tap]))))
+
+
+;; helpers
+(defn editable-reset [etype identifier inputs]
+  [:editable
+   [:editable etype identifier :inputs inputs]
+   [:editable etype identifier :errors {}]
+   [:editable etype identifier :state {}]])
+
+(defn editable-error [etype identifier error]
+  [:editable
+   [:editable etype identifier :errors error]
+   [:editable etype identifier :state {}]])
+
+(defn editable-response
+  ([etype identifier response]
+   (editable-response etype identifier response {}))
+  ([etype identifier response inputs]
+   (conj (editable-reset etype identifier inputs)
+         [:editable etype identifier :response response])))
+
+(defn editable-transform
+  "transforms an event vector that will update the db"
+  [evec & attrs]
+  (let [[channel form-type identifier] evec]
+    (into [:editable form-type identifier] attrs)))
 
 
 ;; forms
@@ -173,37 +204,11 @@
 
      :save (partial save-fn [form-type identifier])
      :delete #(dispatch [:request/command (calculate-command form-type :delete) {:id identifier}])
-     :reset  #(dispatch (e/editable-reset :todos identifier (state :reset)))
+     :reset  #(dispatch (editable-reset :todos identifier (state :reset)))
      :edit   #(dispatch [:editable
                          [:editable :todos identifier :state :reset (inputs)]
                          [:editable :todos identifier :state :editing true]])
      }))
-
-
-;; helpers
-(defn editable-reset [etype identifier inputs]
-  [:editable
-   [:editable etype identifier :inputs inputs]
-   [:editable etype identifier :errors {}]
-   [:editable etype identifier :state {}]])
-
-(defn editable-error [etype identifier error]
-  [:editable
-   [:editable etype identifier :errors error]
-   [:editable etype identifier :state {}]])
-
-(defn editable-response
-  ([etype identifier response]
-   (editable-response etype identifier response {}))
-  ([etype identifier response inputs]
-   (conj (editable-reset etype identifier inputs)
-         [:editable etype identifier :response response])))
-
-(defn editable-transform
-  "transforms an event vector that will update the db"
-  [evec & attrs]
-  (let [[channel form-type identifier] evec]
-    (into [:editable form-type identifier] attrs)))
 
 (defn editable-update
   "update the editable thing in the db,
@@ -309,7 +314,7 @@
           ;; update the thing in the db
           more-tap (merge tap
                           {:form-type form-type :identifier identifier}
-                          {:solo solo})
+                          (if solo {:solo solo}))
           ;; this is the specification for the editable thing:
           {:keys [spec outgoing-spec]
            :or {outgoing-spec spec}
