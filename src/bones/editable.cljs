@@ -2,6 +2,7 @@
   (:require-macros [reagent.ratom :refer [reaction]])
   (:require [cljs.reader :refer [read-string]]
             [re-frame.core :as re-frame]
+            [bones.editable.protocols :as p]
             [cljs.spec :as s]))
 
 (def debug (if js/goog.DEBUG re-frame/debug))
@@ -51,14 +52,6 @@
   )
 ;; end editable
 
-
-
-(defprotocol Client
-  (login   [client args tap])
-  (logout  [client tap])
-  (command [client cmd args tap])
-  (query   [client args tap]))
-
 (defn local-key [prefix form-type]
   ;; use name in case keywords are provided
   (str (name prefix) "-" (name form-type)))
@@ -71,7 +64,7 @@
   (.setItem js/localStorage (local-key prefix form-type) (pr-str value)))
 
 (defrecord LocalStorage [prefix]
-  Client
+  p/Client
   (login [client args tap]
     (dispatch [:response/login {:fake true} 200 tap]))
   (logout [client tap]
@@ -134,6 +127,11 @@
   (let [[channel form-type identifier] evec]
     (into [:editable form-type identifier] attrs)))
 
+(defn sorting  [form-type [sort-key order]]
+  [:editable form-type :_meta [sort-key order]])
+
+(defn filtering [form-type [filter-key value]]
+  [:editable form-type :_meta [filter-key value]])
 
 ;; forms
 (defn detect-controls [{:keys [enter escape]}]
@@ -209,10 +207,11 @@
 
      :save (partial save-fn [form-type identifier])
      :delete #(dispatch [:request/command (calculate-command form-type :delete) {:id identifier}])
-     :reset  #(dispatch (editable-reset :todos identifier (state :reset)))
-     :edit   #(dispatch [:editable
-                         [:editable :todos identifier :state :reset (inputs)]
-                         [:editable :todos identifier :state :editing true]])
+     :reset  #(dispatch (editable-reset form-type identifier (state :reset)))
+     :edit   (fn [attr]
+               #(dispatch [:editable
+                           [:editable form-type identifier :state :reset (inputs)]
+                           [:editable form-type identifier :state :editing attr true]]))
      }))
 
 (defn editable-update
@@ -236,9 +235,9 @@
 (def client-atom (atom {}))
 
 (defn set-client [client]
-  (if (satisfies? Client client)
+  (if (satisfies? p/Client client)
     (reset! client-atom client)
-    (throw (ex-info "client does not satisfy bones.editable/Client" {:client client}))))
+    (throw (ex-info "client does not satisfy bones.editable.protocols/Client" {:client (type client)}))))
 
 (defn client-cofx [{:keys [db] :as cofx} _]
   (assoc cofx :client @client-atom))
@@ -249,32 +248,26 @@
 
 ;; start request
 
-(defn request-login
-  [{:keys [client args tap]}]
-  (login client args tap))
-
-(reg-fx :request/login request-login)
-
 (defn request-logout
   [{:keys [client tap]}]
   (logout client tap))
 
 (reg-fx :request/logout request-logout)
 
-(defn request-command
-  [{:keys [client command args tap]}]
-  ;; unfortunate name collision here
-  (bones.editable/command client command args tap))
+;; (defn request-command
+;;   [{:keys [client command args tap]}]
+;;   ;; unfortunate name collision here
+;;   (bones.editable/command client command args tap))
 
-(reg-fx :request/command request-command)
+;; (reg-fx :request/command request-command)
 
-(defn request-query
-  [{:keys [client params tap]}]
-  (query client params tap))
+;; (defn request-query
+;;   [{:keys [client params tap]}]
+;;   (query client params tap))
 
-(reg-fx :request/query request-query)
+;; (reg-fx :request/query request-query)
 
-(defn request
+(defn request-maker
   "get the inputs from the db,
    conform to spec if there is one,
    and build a data structure to send to :request/* fx"
@@ -296,29 +289,38 @@
 
     ;; maybe this can be in another function
     (= :request/logout channel)
-    (let [{:keys [command tap]} opts]
+    (let [{:keys [tap]} opts]
       {:client client
        :command (or command :logout)
        :args {};; there are no args to send to the server
        :tap tap})
 
-    :ok
-    ;; maybe if form-type has a namespace, use that as the command
-    ;; and the namespace as the form-type
-    ;; maybe merge the defaults from the tap here???????
+    ;; maybe this can be in another function
+    (= :request/query channel)
+    (let [{:keys [tap]} opts]
+      {:client client
+       :command :not-needed  ;; there is no command to send to the server
+       :args partial-args
+       :tap tap})
+
+
+    :default
     (let [{:keys [tap]} opts
+          ;; if command has a namespace, use that as the form-type
           form-type (keyword (or (and command (namespace command))
                                  (:form-type opts)
                                  command))
           identifier (or (and (map? partial-args) (:id partial-args))
                          (:identifier opts)
                          ;; must be an :identifier like :new or just an id
-                         partial-args)
+                         (and (not (map? partial-args)) partial-args))
+
           solo (:solo opts)
           ;; form-type and identifier are needed by the response handler to
           ;; update the thing in the db
           more-tap (merge tap
-                          {:form-type form-type :identifier identifier}
+                          {:form-type form-type :identifier identifier
+                           :command command}
                           (if solo {:solo solo}))
           ;; this is the specification for the editable thing:
           {:keys [spec outgoing-spec]
@@ -336,6 +338,7 @@
                                  (if solo {} inputs)
                                  (if (map? partial-args) partial-args))
           ]
+      (if (:opts debug) (println (str "conforming: " inputs-defaults "\n to: " outgoing-spec)))
       ;; it seems weird but a request with empty args is possible
       ;; both outgoing-spec and inputs can be nil
       (let [args (s/conform outgoing-spec inputs-defaults)]
@@ -367,19 +370,18 @@
       {channel result})))
 
 (defn process-request [cofx event-vec]
-  (let [result (request cofx event-vec)
+  (let [result (request-maker cofx event-vec)
         {:keys [form-type identifier]} (get-in result [:tap])
         [channel] event-vec]
     (dispatch-request channel result form-type identifier)))
 
-(def request-interceptors [(re-frame/inject-cofx :client)])
-
 ;; non-lazy way to register events handlers
-(doseq [channel [:request/login
+(doseq [channel [ ;;:request/login
                  :request/logout
-                 :request/command
-                 :request/query]]
- (reg-event-fx channel request-interceptors process-request))
+                 ;; :request/command
+                 ;; :request/query
+                 ]]
+ (reg-event-fx channel [] process-request))
 
 ;; start response
 
@@ -429,7 +431,8 @@
 (defmethod handler [:response/logout 200]
   [{:keys [db]} [channel response status tap]]
   (let [{:keys [form-type identifier]} tap]
-    {:dispatch (editable-reset form-type identifier {})}))
+    {:dispatch (editable-reset form-type identifier {})
+     :db (assoc db :bones/logged-in? false)}))
 
 (defmethod handler [:response/logout 500]
   [{:keys [db]} [channel response status tap]]
@@ -443,6 +446,11 @@
     {:dispatch (editable-response form-type identifier response)}))
 
 (defmethod handler [:response/command 401]
+  [{:keys [db]} [channel response status tap]]
+  (let [{:keys [form-type identifier]} tap]
+    {:dispatch (editable-error form-type identifier response)}))
+
+(defmethod handler [:response/command 400]
   [{:keys [db]} [channel response status tap]]
   (let [{:keys [form-type identifier]} tap]
     {:dispatch (editable-error form-type identifier response)}))
@@ -488,17 +496,18 @@
 
 ;; hook up the response handlers
 (doseq [channel (handler-channels)]
-  (reg-event-fx channel [debug] handler))
+  ;; client to start and stop it on login and logout
+  (reg-event-fx channel [debug (re-frame/inject-cofx :client)] handler))
 
 
 ;; subscriptions
 
 ;; consider simple filter k/v function
 
-(re-frame/reg-sub-raw
+(re-frame/reg-sub
  :bones/logged-in?
  (fn [db _]
-   (reaction (:bones/logged-in? @db))))
+   (:bones/logged-in? db)))
 
 (defn sort-fn [sorting coll]
   ;; coll is a map of editable things
@@ -519,7 +528,6 @@
     (reaction (if @sorting
                 (sort-fn @sorting @things)
                 @things))))
-
 (defn single [db event-vec]
   (reaction (get-in @db event-vec)))
 
