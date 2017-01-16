@@ -1,6 +1,6 @@
 (ns bones.editable.request
   (:require [cljs.reader :refer [read-string]]
-            [re-frame.core :refer [reg-fx reg-cofx reg-event-fx inject-cofx]]
+            [re-frame.core :as re-frame :refer [reg-fx reg-cofx reg-event-fx inject-cofx]]
             [bones.editable.protocols :as p]
             [bones.editable.helpers :as h]
             [cljs.spec :as s]))

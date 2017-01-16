@@ -20,7 +20,7 @@
   :source-paths ["src"]
   :test-paths ["test"]
 
-  :doo {:debug true
+  :doo {;:debug true
         :build "test"}
 
   :cljsbuild {:builds
@@ -38,9 +38,8 @@
                 :source-paths ["src" "test"]
                 :compiler     {:output-to     "out/test/out.js"
                                :output-dir    "out/test/"
+                               :closure-defines {'goog.DEBUG false} ;too noisy
                                :main          bones.runner
                                :optimizations :none}}
                ]}
-
-
   )

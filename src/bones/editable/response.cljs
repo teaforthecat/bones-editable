@@ -1,6 +1,5 @@
 (ns bones.editable.response
   (:require [re-frame.core :as re-frame :refer [reg-event-fx inject-cofx]]
-            [bones.editable.helpers :refer [editable-reset editable-error]]
             [bones.editable.helpers :as h]))
 
 ;; these are workable (if not sensible) defaults
@@ -30,17 +29,17 @@
 (defmethod handler [:response/login 200]
   [{:keys [db]} [channel response status tap]]
   (let [{:keys [form-type identifier]} tap]
-    {:dispatch (editable-reset form-type identifier {})}))
+    {:dispatch (h/editable-reset form-type identifier {})}))
 
 (defmethod handler [:response/login 401]
   [{:keys [db]} [channel response status tap]]
   (let [{:keys [form-type identifier]} tap]
-    {:dispatch (editable-error form-type identifier response)}))
+    {:dispatch (h/editable-error form-type identifier response)}))
 
 (defmethod handler [:response/login 500]
   [{:keys [db]} [channel response status tap]]
   (let [{:keys [form-type identifier]} tap]
-    {:dispatch (editable-error form-type identifier response)}))
+    {:dispatch (h/editable-error form-type identifier response)}))
 
 (defmethod handler [:response/login 0]
   [{:keys [db]} [channel response status tap]]
@@ -50,13 +49,13 @@
 (defmethod handler [:response/logout 200]
   [{:keys [db]} [channel response status tap]]
   (let [{:keys [form-type identifier]} tap]
-    {:dispatch (editable-reset form-type identifier {})
+    {:dispatch (h/editable-reset form-type identifier {})
      :db (assoc db :bones/logged-in? false)}))
 
 (defmethod handler [:response/logout 500]
   [{:keys [db]} [channel response status tap]]
   (let [{:keys [form-type identifier]} tap]
-    {:dispatch (editable-error form-type identifier response)}))
+    {:dispatch (h/editable-error form-type identifier response)}))
 
 (defmethod handler [:response/command 200]
   [{:keys [db]} [channel response status tap]]
@@ -67,22 +66,22 @@
 (defmethod handler [:response/command 401]
   [{:keys [db]} [channel response status tap]]
   (let [{:keys [form-type identifier]} tap]
-    {:dispatch (editable-error form-type identifier response)}))
+    {:dispatch (h/editable-error form-type identifier response)}))
 
 (defmethod handler [:response/command 400]
   [{:keys [db]} [channel response status tap]]
   (let [{:keys [form-type identifier]} tap]
-    {:dispatch (editable-error form-type identifier response)}))
+    {:dispatch (h/editable-error form-type identifier response)}))
 
 (defmethod handler [:response/command 403]
   [{:keys [db]} [channel response status tap]]
   (let [{:keys [form-type identifier]} tap]
-    {:dispatch (editable-error form-type identifier response)}))
+    {:dispatch (h/editable-error form-type identifier response)}))
 
 (defmethod handler [:response/command 500]
   [{:keys [db]} [channel response status tap]]
   (let [{:keys [form-type identifier]} tap]
-    {:dispatch (editable-error form-type identifier response)}))
+    {:dispatch (h/editable-error form-type identifier response)}))
 
 (defmethod handler [:response/query 200]
   [{:keys [db]} [channel response status tap]]
@@ -92,17 +91,17 @@
 (defmethod handler [:response/query 401]
   [{:keys [db]} [channel response status tap]]
   (let [{:keys [form-type identifier]} tap]
-    {:dispatch (editable-error form-type identifier response)}))
+    {:dispatch (h/editable-error form-type identifier response)}))
 
 (defmethod handler [:response/query 403]
   [{:keys [db]} [channel response status tap]]
   (let [{:keys [form-type identifier]} tap]
-    {:dispatch (editable-error form-type identifier response)}))
+    {:dispatch (h/editable-error form-type identifier response)}))
 
 (defmethod handler [:response/query 500]
   [{:keys [db]} [channel response status tap]]
   (let [{:keys [form-type identifier]} tap]
-    {:dispatch (editable-error form-type identifier response)}))
+    {:dispatch (h/editable-error form-type identifier response)}))
 
 (defn handler-channels []
   (set  (map (fn [[dispatch-value]]
