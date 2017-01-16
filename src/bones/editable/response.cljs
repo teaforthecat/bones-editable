@@ -26,91 +26,92 @@
     {:db (assoc db :bones/logged-in? (:bones/logged-in? message))}
     {:log (str "unknown :event/client-status: " message)}))
 
+(defn tap-success [{:keys [e-scope]} response]
+  (if e-scope
+    (let [[_ e-type identifier] e-scope
+          inputs (:args response)]
+      ;; assuming inputs should be set to args - this closes the loop
+      (if inputs
+        {:dispatch (h/editable-response e-type identifier response inputs)}
+        {:dispatch (h/editable-response e-type identifier response)}))
+    {:log "missing e-scope in tap! it is needed to update the form"}))
+
+(defn tap-error [{:keys [e-scope]} response]
+  (if e-scope
+    (let [[_ e-type identifier] e-scope]
+      ;; assuming the whole response body is ok for :errors property
+      {:dispatch (h/editable-error e-type identifier response)})
+    {:log "missing e-scope in tap! it is needed to update the form"}))
+
 (defmethod handler [:response/login 200]
   [{:keys [db]} [channel response status tap]]
-  (let [{:keys [form-type identifier]} tap]
-    {:dispatch (h/editable-reset form-type identifier {})}))
+  (tap-success tap response))
 
 (defmethod handler [:response/login 401]
   [{:keys [db]} [channel response status tap]]
-  (let [{:keys [form-type identifier]} tap]
-    {:dispatch (h/editable-error form-type identifier response)}))
+  (tap-error tap response))
 
 (defmethod handler [:response/login 500]
   [{:keys [db]} [channel response status tap]]
-  (let [{:keys [form-type identifier]} tap]
-    {:dispatch (h/editable-error form-type identifier response)}))
+  (tap-error tap response))
 
 (defmethod handler [:response/login 0]
   [{:keys [db]} [channel response status tap]]
-  (let [{:keys [form-type identifier]} tap]
-    {:dispatch [:editable form-type identifier :state :connection "failed to connect"]}))
+  (tap-error tap response))
 
 (defmethod handler [:response/logout 200]
   [{:keys [db]} [channel response status tap]]
-  (let [{:keys [form-type identifier]} tap]
-    {:dispatch (h/editable-reset form-type identifier {})
-     :db (assoc db :bones/logged-in? false)}))
+  (merge (tap-success tap response)
+         {:db (assoc db :bones/logged-in? false)}))
 
 (defmethod handler [:response/logout 500]
   [{:keys [db]} [channel response status tap]]
-  (let [{:keys [form-type identifier]} tap]
-    {:dispatch (h/editable-error form-type identifier response)}))
+  (tap-error tap response))
 
 (defmethod handler [:response/command 200]
   [{:keys [db]} [channel response status tap]]
-  (let [{:keys [form-type identifier]} tap]
-    ;; (response-command response status tap) ;;......multi
-    {:dispatch (h/editable-response form-type identifier response)}))
+  (tap-success tap response))
 
 (defmethod handler [:response/command 401]
   [{:keys [db]} [channel response status tap]]
-  (let [{:keys [form-type identifier]} tap]
-    {:dispatch (h/editable-error form-type identifier response)}))
+  (tap-error tap response))
 
 (defmethod handler [:response/command 400]
   [{:keys [db]} [channel response status tap]]
-  (let [{:keys [form-type identifier]} tap]
-    {:dispatch (h/editable-error form-type identifier response)}))
+  (tap-error tap response))
 
 (defmethod handler [:response/command 403]
   [{:keys [db]} [channel response status tap]]
-  (let [{:keys [form-type identifier]} tap]
-    {:dispatch (h/editable-error form-type identifier response)}))
+  (tap-error tap response))
 
 (defmethod handler [:response/command 500]
   [{:keys [db]} [channel response status tap]]
-  (let [{:keys [form-type identifier]} tap]
-    {:dispatch (h/editable-error form-type identifier response)}))
+  (tap-error tap response))
 
 (defmethod handler [:response/query 200]
   [{:keys [db]} [channel response status tap]]
-  (let [{:keys [form-type identifier]} tap]
-    {:dispatch (h/editable-response form-type identifier response)}))
+  (tap-success tap response))
 
 (defmethod handler [:response/query 401]
   [{:keys [db]} [channel response status tap]]
-  (let [{:keys [form-type identifier]} tap]
-    {:dispatch (h/editable-error form-type identifier response)}))
+  (tap-error tap response))
 
 (defmethod handler [:response/query 403]
   [{:keys [db]} [channel response status tap]]
-  (let [{:keys [form-type identifier]} tap]
-    {:dispatch (h/editable-error form-type identifier response)}))
+  (tap-error tap response))
 
 (defmethod handler [:response/query 500]
   [{:keys [db]} [channel response status tap]]
-  (let [{:keys [form-type identifier]} tap]
-    {:dispatch (h/editable-error form-type identifier response)}))
+  (tap-error tap response))
 
 (defn handler-channels []
-  (set  (map (fn [[dispatch-value]]
-               (if (vector? dispatch-value)
-                 ;; response
-                 (first dispatch-value)
-                 ;; event
-                 dispatch-value))
-             (methods handler))))
+  (set (map (fn [[dispatch-value]]
+              (if (vector? dispatch-value)
+                ;; response
+                (first dispatch-value)
+                ;; event
+                dispatch-value))
+            (methods handler))))
 
 ;; hook up the response handlers
 (doseq [channel (handler-channels)]

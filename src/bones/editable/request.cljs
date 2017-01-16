@@ -85,19 +85,16 @@
 (defn login-handler
   "dispatch :request/login to call the client"
   [cofx event-vec]
-  (let [cmd :request/login
-        ;; standard event-vec structure
+  (let [;; standard event-vec structure
         args (resolve-args cofx event-vec)
         scope (h/e-scope event-vec)
-        tap {:command cmd
-             :args args
+        tap {:args args
              :e-scope scope}
         ;; maybe make each attribute able to be pending?
         pending-event-vec (into scope [:state :pending true])]
     {:dispatch pending-event-vec
      ;; trigger the fct
-     :request/login {:command cmd
-                     :args args
+     :request/login {:args args
                      :tap tap
                      :client (:client cofx)}}))
 

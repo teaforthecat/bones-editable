@@ -1,10 +1,23 @@
-(ns bones.editable.helpers)
+(ns bones.editable.helpers
+  "helpers to provide closures around a path to insert into the db without
+  having to provide the whole path")
 
-(defn editable-reset [etype identifier inputs]
-  [:editable
-   [:editable etype identifier :inputs inputs]
-   [:editable etype identifier :errors {}]
-   [:editable etype identifier :state {}]])
+(defn scope-with [scope]
+  (fn [& args] (into scope args)))
+
+(defn e-scope [event-vec & sub]
+  ;; standard event-vec structure
+  (let [[event-name e-type identifier opts] event-vec]
+    (into [:editable e-type identifier] sub)))
+
+(defn editable-reset
+  ([[_ etype identifier inputs]]
+   (editable-reset etype identifier (or inputs {})))
+  ([etype identifier inputs]
+   [:editable
+    [:editable etype identifier :inputs inputs]
+    [:editable etype identifier :errors {}]
+    [:editable etype identifier :state {}]]))
 
 (defn editable-error [etype identifier error]
   [:editable
@@ -23,11 +36,6 @@
   [evec & attrs]
   (let [[channel form-type identifier] evec]
     (into [:editable form-type identifier] attrs)))
-
-(defn e-scope [event-vec & sub]
-  ;; standard event-vec structure
-  (let [[event-name e-type identifier opts] event-vec]
-    (into [:editable e-type identifier] sub)))
 
 (defn sorting  [form-type [sort-key order]]
   [:editable form-type :_meta [sort-key order]])

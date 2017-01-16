@@ -11,6 +11,8 @@
   []
   @re-frame.db/app-db)
 
+;; these are the event names and codes provided by bones.client(and bones.http).
+;; More can be added and they can all be overridden.
 (def all-combinations [[:response/login 200]
                        [:response/login 401]
                        [:response/login 500]
@@ -26,36 +28,51 @@
                        [:response/query 403]
                        [:response/query 500]])
 
-(deftest response-handler
-  (testing "emits broken events sometimes - "
-    (is (= {:dispatch [:editable
-                       [:editable nil nil :inputs {}]
-                       [:editable nil nil :errors {}]
-                       [:editable nil nil :state {}]]}
-           (response/handler {} [:response/login {} 200 {}]))))
-  (testing "all combinations of channels and status codes at least return a :dispatch without blowing up"
+(deftest registered-handlers
+  (testing "all combinations of channels and status codes are handled"
     (doseq [combo all-combinations]
-      (is (contains? (response/handler {} (interleave combo [{} {}])) :dispatch))))
-  (let [tap {:form-type "x"
-             :identifier "y"}]
-    (testing "login 200"
+      (let [db {}
+            [event-name status-code] combo
+            ;; event-data is the response body or event message
+            event-data {}
+            tap {}]
+        (is (contains? (response/handler db [event-name event-data status-code tap])
+                       :log))))))
+
+(deftest success-dispatch
+  (testing " if :e-scope is not set; log"
+    (is (= {:log "missing e-scope in tap! it is needed to update the form"}
+           (response/tap-success {} {}))))
+
+  (let [tap {:e-scope [:_ "x" "y"]}]
+    (testing "tap-success renders viable dispatch data"
       (is (= {:dispatch [:editable
                          [:editable "x" "y" :inputs {}]
                          [:editable "x" "y" :errors {}]
-                         [:editable "x" "y" :state {}]]}
+                         [:editable "x" "y" :state {}]
+                         [:editable "x" "y" :response {"token" "ok"}]]}
+             (response/tap-success tap {"token" "ok"}))))
+    (testing "login 200; uses tap-success correctly"
+      (is (= {:dispatch [:editable
+                         [:editable "x" "y" :inputs {}]
+                         [:editable "x" "y" :errors {}]
+                         [:editable "x" "y" :state {}]
+                         [:editable "x" "y" :response {"token" "ok"}]]}
              (response/handler {} [:response/login {"token" "ok"} 200 tap]))))
-    (testing "login 401"
-      (async done
-       (dispatch (:dispatch
-                  (response/handler {} [:response/login {:args "something"} 401 tap])))
-       (go (<! (a/timeout 100))
-           (is (= "something" (get-in (app-db) [:editable "x" "y" :errors :args])))
-           (done))))
-    (testing "command 200"
+    (testing "command 200; uses tap-success correctly and writes to the db"
       (async done
              (dispatch (:dispatch
                         (response/handler {} [:response/command {:a 1} 200 tap])))
              (go (<! (a/timeout 100))
                  (is (= {:a 1} (get-in (app-db) [:editable "x" "y" :response])))
-                 (done))))
-    (testing "etc...")) )
+                 (done))))))
+
+(deftest tap-error
+  (testing "login 401"
+    (let [tap {:e-scope [:_ "x" "y"]}]
+      (async done
+             (dispatch (:dispatch
+                        (response/handler {} [:response/login {:args "something"} 401 tap])))
+             (go (<! (a/timeout 100))
+                 (is (= "something" (get-in (app-db) [:editable "x" "y" :errors :args])))
+                 (done))))))
