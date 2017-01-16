@@ -16,8 +16,9 @@
   (let [[sort-key order] sorting
         ;; provide sort-cut, or use given fn
         sort-order (get {:asc < :desc >} order order)
-        sort-key-fn (comp sort-key :inputs)]
-    (sort-by sort-key-fn sort-order (vals coll))))
+        sort-key-fn (fn [[identifier thing]]
+                      (get-in thing [:inputs sort-key]))]
+    (sort-by sort-key-fn sort-order coll)))
 
 (defn sortable [db event-vec]
   (let [form-type (second event-vec)
@@ -26,8 +27,11 @@
                                  :_meta
                                  :new))]
     (reaction (if @sorting
+                ;; sort by an :input
                 (sort-fn @sorting @things)
-                @things))))
+                ;; or sort by identifier, mostly for consistency
+                (into (sorted-map) @things)))))
+
 (defn single [db event-vec]
   (reaction (get-in @db event-vec)))
 
@@ -37,7 +41,6 @@
    ;; [channel form-type identifier attribute]
    ;; [:editable form-type identifier :inputs attribute]
    ;; [:editable form-type]
-   (let [identifier (get event-vec 2)])
    (if (= 2 (count event-vec))
      ;; sorted list of the inputs of editable things - the inputs are the attributes of interest
      (sortable db event-vec)
