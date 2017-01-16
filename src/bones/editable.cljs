@@ -74,4 +74,4 @@
 ;; forms
 ;; request
 ;; response
-;; subscriptions
+;; subs
