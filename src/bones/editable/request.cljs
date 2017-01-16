@@ -1,23 +1,36 @@
 (ns bones.editable.request
   (:require [cljs.reader :refer [read-string]]
-            [re-frame.core :as re-frame]
+            [re-frame.core :refer [reg-fx reg-cofx reg-event-fx inject-cofx]]
             [bones.editable.protocols :as p]
+            [bones.editable.helpers :as h]
             [cljs.spec :as s]))
 
 
 (def debug (if js/goog.DEBUG re-frame/debug))
 
-(defn reg-fx [name func]
-  (re-frame/reg-fx name func))
+(def client-atom (atom {}))
 
-(def interceptors [debug (re-frame/inject-cofx :client)])
+(defn client-cofx [cofx _]
+  (assoc cofx :client @client-atom))
 
-(defn reg-event-fx [event-name intercptrs func]
-  (re-frame/reg-event-fx event-name intercptrs func))
+(defn set-client
+  "sets the :client co-effect as a convenience.
+  the client will have functions called on it from
+  bones.editable.protocols/Client. alternatively, the :client co-effect can be
+  registered with:
+    (reg-cofx :client #(assoc % :client my-client))"
+  [client]
+  (if (satisfies? p/Client client)
+    (do
+      (reset! client-atom client)
+      (reg-cofx :client client-cofx))
+    (throw (ex-info "client does not satisfy bones.editable.protocols/Client"
+                    {:client (type client)}))))
+
+(def interceptors [debug (inject-cofx :client)])
 
 (defn login-effect
-  "makes the actual request using the injected client.
-  the response is handled with a response handler"
+  "call the client"
   [{:keys [client args tap]}]
   (p/login client args tap))
 
@@ -37,14 +50,12 @@
 
 (reg-fx :request/query query-effect)
 
+(defn logout-effect
+  "call the client"
+  [{:keys [client tap]}]
+  (p/logout client tap))
 
-(defn handler-wrapper [handler]
-  (fn [cofx event-vec]
-    (let [[event-name e-type identifier-or-args opts] event-vec
-          dispatch-data (handler cofx event-vec)]
-      (merge
-       dispatch-data
-       (if (:debug opts) {:log event-vec})))))
+(reg-fx :request/logout logout-effect)
 
 (defn resolve-args
   "merge data from three sources:
@@ -65,21 +76,19 @@
         defaults (get-in db [:editable e-type :_meta :defaults])
         inputs (get-in db [:editable e-type identifier :inputs])]
     ;; double arrow means reverse merge so top one wins
-    (cond->> args
+    (cond->> (or args {}) ;; if all sources are empty it'll be an empty map instead of nil
       (some #{:inputs} merger) (merge inputs)
       ;; only an identifier was given, options may still contain {:merge :defaults}
       (nil? args) (merge inputs)
       (some #{:defaults} merger) (merge defaults))))
 
-(defn e-scope [event-vec & sub]
-  ;; standard event-vec structure
-  (let [[event-name e-type identifier opts] event-vec]
-    (into [:editable e-type identifier] sub)))
-
-(defn login-handler [cofx event-vec]
+(defn login-handler
+  "dispatch :request/login to call the client"
+  [cofx event-vec]
   (let [cmd :request/login
+        ;; standard event-vec structure
         args (resolve-args cofx event-vec)
-        scope (e-scope event-vec)
+        scope (h/e-scope event-vec)
         tap {:command cmd
              :args args
              :e-scope scope}
@@ -98,14 +107,16 @@
  login-handler)
 
 
-(defn command-handler [cofx event-vec]
+(defn command-handler
+  "dispatch :request/command to call the client"
+  [cofx event-vec]
   (let [[event-name e-type identifier opts] event-vec ;; standard event-vec structure
         cmd e-type ;; misnomer here, hmmm
         e-type (if (namespace e-type) (namespace e-type) e-type)
         ;; use updated event-vec with namespace as e-type
         new-event-vec [event-name e-type identifier opts]
         args (resolve-args cofx new-event-vec)
-        scope (e-scope new-event-vec)
+        scope (h/e-scope new-event-vec)
         tap {:command cmd
              :args args
              :e-scope scope}
@@ -131,16 +142,16 @@
                      :tap tap
                      :client (:client cofx)}}))
 
-(defn long-query-handler [cofx event-vec]
+(defn long-query-handler
+  "builds args from three sources see `resolve-args'"
+  [cofx event-vec]
   (let [[event-name e-type identifier opts] event-vec ;; standard event-vec structure
         query e-type ;; misnomer here, hmmm
         e-type (if (namespace e-type) (keyword (namespace e-type)) e-type)
         ;; use updated event-vec with namespace as e-type
         new-event-vec [event-name e-type identifier opts]
-        _ (println new-event-vec)
-        _ (println (:db cofx))
         args (resolve-args cofx new-event-vec)
-        scope (e-scope new-event-vec)
+        scope (h/e-scope new-event-vec)
         tap {:args args
              :query query
              :e-scope scope}
@@ -152,10 +163,14 @@
                      :tap tap
                      :client (:client cofx)}}))
 
-(defn query-handler [cofx event-vec]
-  ;; the event args may or may not be the standard event-vec structure
+(defn query-handler
+  " dispatch :request/query effect to call call
+  args may be resolved from `resolve-args' or sent as an event arg.
+   a map as event arg will short-circuit some logic for a simpler interface"
+  [cofx event-vec]
+  ;; optional standard event-vec structure
   (let [[event-name e-type identifier opts] event-vec]
-    (if (not (map? e-type)) ;;(= 4 (count event-vec))
+    (if (not (map? e-type))
       (if (map? identifier)
         (throw "non-standard event-vec, we have a problem")
         (long-query-handler cofx event-vec))
@@ -165,3 +180,15 @@
  :request/query
  interceptors
  query-handler)
+
+(defn logout-handler
+  "dispatch :request/logout effect to call client"
+  [cofx event-vec]
+  (let [[_ tap] event-vec]
+    {:request/logout {:tap tap
+                      :client (:client cofx)}}) )
+
+(reg-event-fx
+ :request/logout
+ interceptors
+ logout-handler)
