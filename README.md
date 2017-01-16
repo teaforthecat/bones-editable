@@ -7,35 +7,61 @@ form components concise when using re-frame.
 ## About
 
 The core of this library is a standardized event vector that maps to a path in
-the app-db (e.g.: using (get-in app-db path)). An event can be dispatched with
+the app-db (e.g.: using `(get-in app-db path)`). An event can be dispatched with
 this path to get data in and a subscription can be setup with this path to get
-data out. This path holds things that is meant to be edited. These edits are
-meant to be sent to a server and persisted which entails a life cycle of events.
-The state of this life cycle is store in the `:state` key which is next to
+data out. This path holds things that are meant to be edited. These edits are
+meant to be sent to a server and persisted which entails a lifecycle of events.
+The state of this lifecycle is store in the `:state` key which is next to
 `:inputs` and `:errors`. `:errors` can be populated from the client when inputs
 don't conform to a spec, or in a response handler when the server responds with
-an error code. It is then up to the component to subscribe to these errors to
-render to the user.
+an error code. It is then up to the component to subscribe to these errors and 
+render them to the user.
 
-This encapsulation of a standardized event vector gives us the ability to take
-short cuts when building events to dispatch and queries to subscribe to. This
-will help us build forms (I hope). Here is what an "editable" form looks
-like with these short cuts (which are closures):
+We can encapsulate this standardized event vector in closure functions, which
+look pretty in hiccup. Here is what an "editable" form looks like with these
+closures:
 
     (let [{:keys [reset save errors]} (e/form :login :new)]
       [:span.errors (errors :username)]
-      [e/input :login :new :username :class "form-control"] ;;=> <input ...
+      [e/input :login :new :username :class "form-control"] ;;=> <input class="form-control"...
       [:button {:on-click save}] ;;=> submit to server
       ) 
 
-This library does not generate markup except for the input elements. These
-closures are just the plumbing; the data flow.
+Nice and tidy right? Here is what the component would look like without the
+encapsulation. This also shows the paths that were mentioned above.
 
-## Usage
+    (let [inputs (subscribe [:editable :login :new :inputs])
+          errors (subscribe [:editable :login :new :errors])]
+      [:span.errors (:username @errors)]
+      [:input :class "form-control"
+              :value (:username @inputs)
+              :on-change #(dispatch-sync [:editable :login :new :inputs :username ( -> % .-target .-value)])]
+      [:button {:on-click #(dispatch [:request/command :login :new {:args @inputs}])}]
+    
+    )
 
-coming soon...
+
+more to come...
 
 
+## Requests
+
+- `(dispatch [:request/command ...])`
+
+## Responses
+
+- `(defmethod handler [:response/login 200])`
+
+## Events
+
+- `(defmethod handler :event/message)`
+
+
+## Configure the Client
+
+- using local storage
+
+- swapping out bones.client or other
 
 ## License
 
