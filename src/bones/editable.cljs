@@ -2,6 +2,11 @@
   (:require-macros [reagent.ratom :refer [reaction]])
   (:require [cljs.reader :refer [read-string]]
             [re-frame.core :refer [reg-event-db]]
+            [bones.editable.helpers :as h]
+            [bones.editable.forms :as f]
+            [bones.editable.request :as request]
+            [bones.editable.response :as response]
+            [bones.editable.subs :as subs]
             [bones.editable.protocols :as p]))
 
 (defn editable-update

@@ -90,7 +90,11 @@
   (testing " no sources is an empty map"
     (let [cofx {:db xyz-db}
           event-vec [:event-name :something :else]]
-      (is (= {} (request/resolve-args cofx event-vec))))))
+      (is (= {} (request/resolve-args cofx event-vec)))))
+  (testing " no opts and identifier is a map; identifier is used as args"
+    (let [cofx {:db {}}
+          event-vec [:event-name :x {:a true}]]
+      (is (= {:a true} (request/resolve-args cofx event-vec))))))
 
 (defn add-inputs [db event-vec]
   (assoc-in db (h/e-scope event-vec :inputs) (:args (last event-vec))))

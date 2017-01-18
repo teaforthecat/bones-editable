@@ -64,13 +64,16 @@
    - data form the defaults of the thing
   conditionally, merging can be prevented with the :solo option
   In the case below, the resolved args would be only `{:x true}'
-  (dispatch [X E-TYPE ID {:args {:x true} :solo true}])
+  (dispatch [X E-TYPE ID {:args {:x true}}])
+  or
+  (dispatch [X command args])
   In this next case, all data will come from the inputs in the db
   (dispatch [X E-TYPE ID])"
   [cofx event-vec]
   (let [db (:db cofx)
         [event-name e-type identifier opts] event-vec ;; standard event-vec structure
-        {:keys [args solo]} opts ; :merge is in opts but we don't want to overwrite the function
+        _ (if (and (map? identifier) (map? opts)) (throw (ex-info "identifier is a map and should not be" {:identifier identifier :opts opts}) ))
+        args (if (map? identifier) identifier (:args opts))
         merge-opt (:merge opts)
         merger (if (coll? merge-opt) merge-opt [merge-opt])
         defaults (get-in db [:editable e-type :_meta :defaults])

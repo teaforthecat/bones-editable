@@ -31,6 +31,7 @@
     (let [[_ e-type identifier] e-scope
           inputs (:args response)]
       ;; assuming inputs should be set to args - this closes the loop
+      ;; the data is that which has been persisted, in theory
       (if inputs
         {:dispatch (h/editable-response e-type identifier response inputs)}
         {:dispatch (h/editable-response e-type identifier response)}))
@@ -45,7 +46,8 @@
 
 (defmethod handler [:response/login 200]
   [{:keys [db]} [channel response status tap]]
-  (tap-success tap response))
+  (merge {:db (assoc db :bones/logged-in? true)}
+         (tap-success tap response)))
 
 (defmethod handler [:response/login 401]
   [{:keys [db]} [channel response status tap]]
@@ -61,8 +63,8 @@
 
 (defmethod handler [:response/logout 200]
   [{:keys [db]} [channel response status tap]]
-  (merge (tap-success tap response)
-         {:db (assoc db :bones/logged-in? false)}))
+  (merge {:db (assoc db :bones/logged-in? false)}
+         (tap-success tap response)))
 
 (defmethod handler [:response/logout 500]
   [{:keys [db]} [channel response status tap]]

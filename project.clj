@@ -1,4 +1,4 @@
-(defproject bones/editable "0.1.0"
+(defproject bones/editable "0.1.1"
   :description "lifecycle events for forms using re-frame"
   :url "https://github.com/teaforthecat/bones-editable"
   :license {:name "Eclipse Public License"
@@ -38,7 +38,7 @@
                 :source-paths ["src" "test"]
                 :compiler     {:output-to     "out/test/out.js"
                                :output-dir    "out/test/"
-                               :closure-defines {'goog.DEBUG false} ;too noisy
+                               :closure-defines {"goog.DEBUG" false} ;too noisy
                                :main          bones.runner
                                :optimizations :none}}
                ]}

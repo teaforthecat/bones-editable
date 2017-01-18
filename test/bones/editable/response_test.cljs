@@ -43,8 +43,16 @@
   (testing " if :e-scope is not set; log"
     (is (= {:log "missing e-scope in tap! it is needed to update the form"}
            (response/tap-success {} {}))))
-
-  (let [tap {:e-scope [:_ "x" "y"]}]
+  (testing " if :args is in response; set inputs to :args"
+    (is (= {:dispatch [:editable
+                       [:editable "x" "y" :inputs {:b 2}]
+                       [:editable "x" "y" :errors {}]
+                       [:editable "x" "y" :state {}]
+                       [:editable "x" "y" :response {:args {:b 2}}]]}
+           (response/tap-success {:e-scope [:_ "x" "y"]} {:args {:b 2}}))))
+  ;; when :args is present in tap or even better, response, is assumed to mean that the inputs
+  ;; should be set to args. this is a nice easy way to close the loop, meaning the data that you see is the data that has been persisted.
+  (let [tap {:e-scope [:_ "x" "y"] :args {:a true}}]
     (testing "tap-success renders viable dispatch data"
       (is (= {:dispatch [:editable
                          [:editable "x" "y" :inputs {}]
@@ -57,7 +65,8 @@
                          [:editable "x" "y" :inputs {}]
                          [:editable "x" "y" :errors {}]
                          [:editable "x" "y" :state {}]
-                         [:editable "x" "y" :response {"token" "ok"}]]}
+                         [:editable "x" "y" :response {"token" "ok"}]]
+              :db {:bones/logged-in? true}}
              (response/handler {} [:response/login {"token" "ok"} 200 tap]))))
     (testing "command 200; uses tap-success correctly and writes to the db"
       (async done

@@ -46,6 +46,36 @@ more to come...
 
 ## Requests
 
+Let's create a function that will send data to the server. It will draw data
+from three sources. 
+  
+  - user inputs (app-db)
+  - e-type defaults (:_meta in app-db)
+  - parameter args when called (direct)
+  
+The merge will need to be declared in the dispatch call, and it will be
+different for each function we write. Let's start with creating things having to
+do with anatomy. 
+
+    (defn create [e-type attrs]
+      (let [command (keyword e-type :create)
+            identifier :new]
+        (dispatch [:request/command
+
+                   ;; the namespace command is the e-type which holds
+                      :_meta (which holds :defaults)
+
+                   command
+                   ;; :new is part of e-type and holds :inputs (user inputs)
+                   identifier 
+                   ;; with this the client will receive:
+                   ;; {:command command :args (merge defaults attrs inputs)}
+                   {:args attrs :merge [:defaults :inputs]}])))
+
+This function doesn't actually perform the request, the registered effect
+`request/command`: does. This is part of the library and we don't have to worry
+about that here. We do need to set the client though; see below.
+  
 - `(dispatch [:request/command ...])`
 
 ## Responses
