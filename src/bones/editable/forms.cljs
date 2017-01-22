@@ -29,29 +29,23 @@
 (defn input [e-type identifier attr & {:as html-attrs}]
   (field e-type identifier attr html-attrs))
 
-
-(defn calculate-command [e-type action]
-  (keyword (name e-type) (name action)))
+(defn conventional-command-event
+  ([e-type identifier]
+   (let [action (if (= :new identifier) :new :update)]
+     (conventional-command-event e-type identifier action)))
+  ([e-type identifier action]
+   (let [cmd (keyword (name e-type) (name action))]
+     [:request/command cmd identifier])))
 
 (defn save-fn
-  ;; the event is the button click
-  ([form-type identifier event]
-   ;; call it, save all the inputs. this way it can be used without parens in hiccup, which
-   ;; is kind of neat
-   (let [action (if (= :new identifier) :new :update)
-         ;; convention for commands here e.g.: :todos/update
-         calculated-command (calculate-command form-type action)]
-     (dispatch [:request/command calculated-command identifier]))))
-
-(defn submit
-  ([command args]
-   (submit command args {}))
-  ([command args opts]
-   (fn []
-     (dispatch [:request/command
-                command
-                (if (fn? args) (args) args)
-                opts]))))
+  ([e-type identifier event-or-opts]
+   ;; is it a button click event? or opts map?
+   (if (aget event-or-opts "target")
+     ;; it's an event so act on it
+     (dispatch (conj (conventional-command-event e-type identifier) {}))
+     ;; else its opts so return another function to handle the click event
+     (fn [event]
+       (dispatch (conj (conventional-command-event e-type identifier) event-or-opts))))))
 
 (defn form
   "returns function as closures around subscriptions to a single 'editable' thing in the
@@ -70,13 +64,10 @@
      :errors errors
      :defaults defaults
 
-     ;; use submit for customizations
-     :submit submit
      ;; save comes loaded with conventions
-     :save (partial save-fn form-type identifier)
-     :delete #(dispatch [:request/command (calculate-command form-type :delete) {:id identifier}])
-     :reset-event reset-event
-     :reset  #(dispatch reset-event)
+     :save (partial save-fn e-type identifier)
+     :delete #(dispatch (conventional-command-event e-type identifier :delete))
+     :reset  #(dispatch (h/editable-reset e-type identifier (state :reset)))
      :edit   (fn [attr]
                #(dispatch [:editable
                            [:editable e-type identifier :state :reset (inputs)]

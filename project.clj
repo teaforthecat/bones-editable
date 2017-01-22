@@ -12,6 +12,7 @@
                    :dependencies [[binaryage/devtools "0.8.3"]
                                   [figwheel-sidecar "0.5.4-3"]
                                   [com.cemerick/piggieback "0.2.1"]
+                                  [day8.re-frame/test "0.1.3"]
                                   ]
                    :plugins [[lein-cljsbuild "1.1.4"]
                              [lein-figwheel "0.5.4-3"]
