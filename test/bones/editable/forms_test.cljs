@@ -1,15 +1,8 @@
 (ns bones.editable.forms-test
-  (:require-macros [cljs.core.async.macros :refer [go go-loop]])
-  (:require [cljs.test :as t :refer-macros [deftest testing is async]]
-            [cljs.spec :as s]
-            [re-frame.core :as re-frame :refer [dispatch dispatch-sync reg-event-db reg-event-fx reg-fx]]
-            [day8.re-frame.test :refer [run-test-sync* run-test-async wait-for]]
-            [bones.editable :as e]
-            [bones.editable.forms :as forms]
-            [bones.editable.protocols :as p]
-            [bones.editable.helpers :as h]
-            [devtools.core :as devtools]
-            [cljs.core.async :as a]))
+  (:require [bones.editable :as e]
+            [cljs.test :as t :refer-macros [deftest is testing]]
+            [day8.re-frame.test :refer [run-test-async wait-for]]
+            [re-frame.core :as re-frame :refer [dispatch]]))
 
 (deftest reset-closure
   (testing "reset upserts empty maps to path :errors,:state,:inputs"
@@ -43,7 +36,7 @@
       (run-test-async
        ;; usage:
        ;;  :on-click save
-       (save #js{"target" "xyz"})
+       (save (js-obj {"target" "xyz"}))
        (wait-for [:request/command event]
                  ;; this event will resolve inputs from the db
                  (is (= [:request/command :todos/new :new {}]
@@ -55,7 +48,7 @@
        ;;  :on-click (save {:args {:b 2}})
 
        ;; fake click
-       (apply (save {:args {:b 2}}) [#js{"target" "xyz"}])
+       (apply (save {:args {:b 2}}) [(js-obj {"target" "xyz"})])
        (wait-for [:request/command event]
                  ;; this event will resolve inputs from the db
                  (is (= [:request/command :todos/new :new {:args {:b 2}}]
