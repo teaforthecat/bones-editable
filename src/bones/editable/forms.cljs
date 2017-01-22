@@ -34,20 +34,24 @@
   (keyword (name e-type) (name action)))
 
 (defn save-fn
-  ([[e-type id]]
+  ;; the event is the button click
+  ([form-type identifier event]
    ;; call it, save all the inputs. this way it can be used without parens in hiccup, which
    ;; is kind of neat
    (let [action (if (= :new identifier) :new :update)
-         calculated-command (calculate-command e-type action)]
-     (dispatch [:request/command calculated-command identifier])))
-  ([[e-type identifier] opts]
-   ;; opts can be options like :merge
+         ;; convention for commands here e.g.: :todos/update
+         calculated-command (calculate-command form-type action)]
+     (dispatch [:request/command calculated-command identifier]))))
+
+(defn submit
+  ([command args]
+   (submit command args {}))
+  ([command args opts]
    (fn []
-     (let [new-opts (if (fn? opts) (opts) opts)
-           action (if (= :new identifier) :new :update)
-           ;; convention for commands here e.g.: :todos/update
-           calculated-command (calculate-command e-type action)]
-       (dispatch [:request/command calculated-command identifier new-opts])))))
+     (dispatch [:request/command
+                command
+                (if (fn? args) (args) args)
+                opts]))))
 
 (defn form
   "returns function as closures around subscriptions to a single 'editable' thing in the
@@ -66,9 +70,13 @@
      :errors errors
      :defaults defaults
 
-     :save (partial save-fn [e-type identifier])
-     :delete #(dispatch [:request/command (calculate-command e-type :delete) {:id identifier}])
-     :reset  #(dispatch (h/editable-reset e-type identifier (state :reset)))
+     ;; use submit for customizations
+     :submit submit
+     ;; save comes loaded with conventions
+     :save (partial save-fn form-type identifier)
+     :delete #(dispatch [:request/command (calculate-command form-type :delete) {:id identifier}])
+     :reset-event reset-event
+     :reset  #(dispatch reset-event)
      :edit   (fn [attr]
                #(dispatch [:editable
                            [:editable e-type identifier :state :reset (inputs)]
