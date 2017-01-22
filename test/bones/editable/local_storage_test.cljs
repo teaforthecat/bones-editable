@@ -82,7 +82,6 @@
        (wait-for [:response/command event]
                  (p/query client {:e-type :todos})
                  (wait-for [:response/query event]
-                           ;; TODO: spec pattern matching
                            (is (empty? (get-in event [1 :results])))))))
 
     (testing ":delete many action deletes many from LocalStorage"
@@ -94,7 +93,6 @@
        (wait-for [:response/command event]
                  (p/query client {:e-type :todos})
                  (wait-for [:response/query event]
-                           ;; TODO: spec pattern matching
                            (is (empty? (get-in event [1 :results])))))))
 
     (testing ":delete many action does not delete everything from LocalStorage"
@@ -106,7 +104,12 @@
        (wait-for [:response/command event]
                  (p/query client {:e-type :todos})
                  (wait-for [:response/query event]
-                           ;; TODO: spec pattern matching
                            (is (not (empty? (get-in event [1 :results]))))))))
+
+    (testing "query responds with error code if e-type is nil"
+      (run-test-async
+       (p/query client {:e-type nil})
+       (wait-for [:response/query event]
+                 (is (= 401 (get-in event [2]))))))
 
     ))

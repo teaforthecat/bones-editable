@@ -94,7 +94,11 @@
   (testing " no opts and identifier is a map; identifier is used as args"
     (let [cofx {:db {}}
           event-vec [:event-name :x {:a true}]]
-      (is (= {:a true} (request/resolve-args cofx event-vec))))))
+      (is (= {:a true} (request/resolve-args cofx event-vec)))))
+  (testing " empty args and merge :inputs and defaults"
+    (let [cofx {:db xyz-db}
+          event-vec [:request/command :x :y {:args {}, :merge [:inputs :defaults]}]]
+      (is (= {:z 1, :c 3, :b 1} (request/resolve-args cofx event-vec))))))
 
 (defn add-inputs [db event-vec]
   (assoc-in db (h/e-scope event-vec :inputs) (:args (last event-vec))))
@@ -151,7 +155,7 @@
                               (is (= {:f 6} args))
                               (is (= {:command :x/create
                                       :args {:f 6}
-                                      :e-scope [:editable "x" :new]} tap))
+                                      :e-scope [:editable :x :new]} tap))
                               (done))
                  new-client (assoc client :command-fn command-fn)
                  _ (request/set-client new-client)]

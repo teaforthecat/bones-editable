@@ -82,7 +82,7 @@
     (cond->> (or args {}) ;; if all sources are empty it'll be an empty map instead of nil
       (some #{:inputs} merger) (merge inputs)
       ;; only an identifier was given, options may still contain {:merge :defaults}
-      (nil? args) (merge inputs)
+      (empty? args) (merge inputs)
       (some #{:defaults} merger) (merge defaults))))
 
 (defn login-handler
@@ -112,7 +112,7 @@
   [cofx event-vec]
   (let [[event-name e-type identifier opts] event-vec ;; standard event-vec structure
         cmd e-type ;; misnomer here, hmmm
-        e-type (if (namespace e-type) (namespace e-type) e-type)
+        e-type (if (namespace e-type) (keyword (namespace e-type)) e-type)
         ;; use updated event-vec with namespace as e-type
         new-event-vec [event-name e-type identifier opts]
         args (resolve-args cofx new-event-vec)

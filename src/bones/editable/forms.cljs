@@ -45,7 +45,8 @@
      (dispatch (conj (conventional-command-event e-type identifier) {}))
      ;; else its opts so return another function to handle the click event
      (fn [event]
-       (dispatch (conj (conventional-command-event e-type identifier) event-or-opts))))))
+       (let [opts (if (fn? event-or-opts) (event-or-opts) event-or-opts)]
+         (dispatch (conj (conventional-command-event e-type identifier) opts)))))))
 
 (defn form
   "returns function as closures around subscriptions to a single 'editable' thing in the

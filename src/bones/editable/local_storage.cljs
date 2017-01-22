@@ -18,9 +18,7 @@
 
 (defmethod take-action "new"
   [actionable args things]
-  ;; all things get an id because this is the happy path :)
-  (let [thing (update args :id (fnil identity (random-uuid)))]
-    (assoc things (:id thing) thing)))
+  (assoc things (:id args) args))
 
 (defmethod take-action "delete"
   [actionable args things]
@@ -52,29 +50,38 @@
             actionable (if many? (str action "-many") action)]
         (cond
           (and (some #{"update" "delete"} actionable)
-                 (nil? (:id args)))
+               (nil? (:id args)))
           (throw (js/Error. (str "no :id present in args: " {:command cmd
                                                              :args args})))
           (and many? (not= "new" action) (not (every? :id args)))
           (throw (js/Error. (str "at least one thing missing an :id in: " {:command cmd
                                                                            :args args})))
           :ok
-          (let [things (local-get-item prefix cmdspace)]
-            (local-set-item prefix cmdspace (take-action actionable args things))))
-        (dispatch [:response/command
-                   ;; args in the response means update the editable thing's inputs
-                   ;; it will be weird to see that the delete-many args have been
-                   ;; assigned an id, but oh well - it won't be used
-                   {:args args-given-id :command cmd}
-                   ;; response status
-                   200
-                   tap]))
+          (let [things (local-get-item prefix cmdspace)
+                ;; all things get an id because this is the happy path :)
+                ;; but it may also be a list of things so this variable name
+                ;; still isn't the best
+                args-with-id (if (= "new" actionble)
+                               (update args :id (fnil identity (random-uuid)))
+                               args)
+                response-args args-with-id]
+            (local-set-item prefix cmdspace (take-action actionable args-with-id things))
+            (dispatch [:response/command
+                       ;; args in the response means update the editable thing's inputs
+                       ;; it will be weird to see that the delete-many args have been
+                       ;; assigned an id, but oh well - it won't be used
+                       {:args response-args :command cmd}
+                       ;; response status
+                       200
+                       tap]))))
       (catch js/Error e
           (dispatch [:response/command
                      {:errors {:message (.-message e)}}
                      401
                      tap]))))
   (query [client args tap]
-    (let [{:keys [e-type]} args
-          things (local-get-item prefix e-type)]
-      (dispatch [:response/query {:results things} 200 tap]))))
+    (let [{:keys [e-type]} args]
+      (if e-type
+        (let [things (local-get-item prefix e-type)]
+          (dispatch [:response/query {:results things} 200 tap]))
+        (dispatch [:response/query {:error ":e-type is nil"} 401 tap])))))

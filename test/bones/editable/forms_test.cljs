@@ -36,19 +36,18 @@
       (run-test-async
        ;; usage:
        ;;  :on-click save
-       (save (js-obj {"target" "xyz"}))
+       (save (js-obj {"target" "fakeClick"}))
        (wait-for [:request/command event]
                  ;; this event will resolve inputs from the db
                  (is (= [:request/command :todos/new :new {}]
                         event))))))
+
   (testing "calling save with a map returns a save-fn with options"
     (let [{:keys [save]} (e/form :todos :new)]
       (run-test-async
        ;; usage:
        ;;  :on-click (save {:args {:b 2}})
-
-       ;; fake click
-       (apply (save {:args {:b 2}}) [(js-obj {"target" "xyz"})])
+       ((save {:args {:b 2}}) (js-obj {"target" "fakeClick"}))
        (wait-for [:request/command event]
                  ;; this event will resolve inputs from the db
                  (is (= [:request/command :todos/new :new {:args {:b 2}}]

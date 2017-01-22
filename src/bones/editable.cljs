@@ -1,7 +1,7 @@
 (ns bones.editable
   (:require-macros [reagent.ratom :refer [reaction]])
   (:require [cljs.reader :refer [read-string]]
-            [re-frame.core :refer [reg-event-db]]
+            [re-frame.core :refer [reg-event-db debug]]
             [bones.editable.helpers :as h]
             [bones.editable.forms :as f]
             [bones.editable.request :as request]
@@ -30,6 +30,13 @@
 ;; helpers
 ;; forms
 (def form f/form)
+(def detect-controls f/detect-controls)
+(def input f/input)
+(def checkbox f/checkbox)
+
+;; protocols
+(def command p/command)
+(def query p/query)
 
 ;; request
 ;; response
