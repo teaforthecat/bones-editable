@@ -122,12 +122,16 @@
              :e-scope scope}
         ;; maybe make each attribute able to be pending?
         pending-event-vec (into scope [:state :pending true])]
-    {:dispatch pending-event-vec
-     ;; trigger the fct
-     :request/command {:command cmd
-                       :args args
-                       :tap tap
-                       :client (:client cofx)}}))
+
+    ;; is there an identifier?
+    ;; (if (< 2 (count scope))
+    ;; the request is finishing before this pending state gets run, which creates
+    ;; invalid data. Will probably want to use re-frame-forward-events-fx
+    ;;   (merge {:dispatch pending-event-vec}))
+    {:request/command {:command cmd
+                                :args args
+                                :tap tap
+                                :client (:client cofx)}}))
 
 (reg-event-fx
  :request/command

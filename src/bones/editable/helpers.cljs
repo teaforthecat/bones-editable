@@ -8,7 +8,12 @@
 (defn e-scope [event-vec & sub]
   ;; standard event-vec structure
   (let [[event-name e-type identifier opts] event-vec]
-    (into [:editable e-type identifier] sub)))
+    (if (and (keyword? e-type)
+             (or (uuid? identifier)
+                 ;; I think this should only be the :new keyword
+                 (keyword? identifier)))
+      (into [:editable e-type identifier] sub)
+      [:editable e-type])))
 
 (defn editable-reset
   ([[_ etype identifier inputs]]
