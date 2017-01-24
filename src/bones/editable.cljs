@@ -36,6 +36,8 @@
 
 ;; protocols
 (def Client p/Client)
+(def login p/login)
+(def logout p/logout)
 (def command p/command)
 (def query p/query)
 

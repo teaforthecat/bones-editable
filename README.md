@@ -73,13 +73,13 @@ First extend the Client:
 
     (extend-type other/Client
       e/Client
-      (login [cmp args tap]
+      (e/login [cmp args tap]
         (other/login cmp args tap))
-      (logout [cmp tap]
+      (e/logout [cmp tap]
         (other/logout cmp tap))
-      (command [cmp cmd args tap]
+      (e/command [cmp cmd args tap]
         (other/command cmp cmd args tap))
-      (query [cmp args tap]
+      (e/query [cmp args tap]
         (other/query cmp args tap)))
    
     ;; then on initialize
