@@ -11,7 +11,7 @@ the app-db (e.g.: using `(get-in app-db path)`). An event can be dispatched with
 this path to get data in and a subscription can be setup with this path to get
 data out. This path holds things that are meant to be edited. These edits are
 meant to be sent to a server and persisted which entails a lifecycle of events.
-The state of this lifecycle is store in the `:state` key which is next to
+The state of this lifecycle is stored in the `:state` key which is next to
 `:inputs` and `:errors`. `:errors` can be populated from the client when inputs
 don't conform to a spec, or in a response handler when the server responds with
 an error code. It is then up to the component to subscribe to these errors and 
@@ -41,11 +41,79 @@ encapsulation. This also shows the paths that were mentioned above.
     )
 
 
-more to come...
+## Configure the Client
+
+- using local storage
+
+In early development a web app can be built with full interaction without a
+server by using Local Storage. There are two ways to hook up the Local Storage client:
+
+     (require '[bones.editable :as e])
+
+     ;; 1) on initialize
+     (re-frame/reg-event-db
+       :initialise-db
+       (fn [_ _]
+         (e/set-client (e.ls/LocalStorage. "app-name-prefix") )
+         default-value))
+
+     ;; 2) override cofx
+    (re-frame/reg-cofx 
+      :client
+      #(assoc % :client (e.ls/LocalStorage. "app-name-prefix"))) 
+    
+    
+     
+- swapping out bones.client or other
+
+Then when the app has blossomed it can receive a real client to talk to a
+server.
+
+First extend the Client:
+
+    (extend-type other/Client
+      e/Client
+      (login [cmp args tap]
+        (other/login cmp args tap))
+      (logout [cmp tap]
+        (other/logout cmp tap))
+      (command [cmp cmd args tap]
+        (other/command cmp cmd args tap))
+      (query [cmp args tap]
+        (other/query cmp args tap)))
+   
+    ;; then on initialize
+    (e/set-client (other/Client. some-config))
+    
+
+## Responses
+
+Response handlers are a very important part of an application and can often hold
+a lot of system logic that is unique to the application. This isn't business
+logic but system logic. Ideally this would be abstracted away so that even form
+submission and success or errors could be a matter of whether there is data
+present in the app-db. We are not there yet though, and I'm sure you will need
+to customize the system logic that runs from a server response. That is why they
+have been implemented as a multi-method. This means you can override any
+response per status code that you need to. Mostly I think it will be
+`:response/command 200` and `:event/message` . These are the two events that
+occur from a positive response from the server. `:event/message` is a message
+from a WebSocket connection or SSE channel. The other responses will result
+in data being created in the app-db under the `:error` key in the editable
+thing, which can be subscribed to and rendered.
+
+
+- `(defmethod e/handler [:response/command 200])`
+
+## Events
+
+- `(defmethod e/handler :event/message)`
+
 
 
 ## Requests
 
+Requests can be created separately from forms.
 Let's create a function that will send data to the server. It will draw data
 from three sources. 
   
@@ -53,9 +121,7 @@ from three sources.
   - e-type defaults (:_meta in app-db)
   - parameter args when called (direct)
   
-The merge will need to be declared in the dispatch call, and it will be
-different for each function we write. Let's start with creating things having to
-do with anatomy. 
+The merge will need to be declared in the dispatch call.
 
     (defn create [e-type attrs]
       (let [command (keyword e-type :create)
@@ -76,22 +142,8 @@ This function doesn't actually perform the request, the registered effect
 `request/command`: does. This is part of the library and we don't have to worry
 about that here. We do need to set the client though; see below.
   
-- `(dispatch [:request/command ...])`
+- `(dispatch [:request/command command-name args])`
 
-## Responses
-
-- `(defmethod handler [:response/login 200])`
-
-## Events
-
-- `(defmethod handler :event/message)`
-
-
-## Configure the Client
-
-- using local storage
-
-- swapping out bones.client or other
 
 ## License
 

@@ -72,7 +72,7 @@
   [cofx event-vec]
   (let [db (:db cofx)
         [event-name e-type identifier opts] event-vec ;; standard event-vec structure
-        _ (if (and (map? identifier) (map? opts)) (throw (ex-info "identifier is a map and should not be" {:identifier identifier :opts opts}) ))
+        _ (if (and (map? identifier) (map? opts)) (throw (ex-info "identifier and opts can not both be maps" {:identifier identifier :opts opts}) ))
         args (if (map? identifier) identifier (:args opts))
         merge-opt (:merge opts)
         merger (if (coll? merge-opt) merge-opt [merge-opt])
@@ -176,7 +176,7 @@
   (let [[event-name e-type identifier opts] event-vec]
     (if (not (map? e-type))
       (if (map? identifier)
-        (throw "non-standard event-vec, we have a problem")
+        (throw (ex-info "non-standard event-vec, we have a problem" {:event-vec event-vec}))
         (long-query-handler cofx event-vec))
       (short-query-handler cofx event-vec))))
 

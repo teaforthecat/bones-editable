@@ -35,9 +35,11 @@
 (def checkbox f/checkbox)
 
 ;; protocols
+(def Client p/Client)
 (def command p/command)
 (def query p/query)
 
 ;; request
 ;; response
+(def handler response/handler)
 ;; subs
