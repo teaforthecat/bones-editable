@@ -57,6 +57,14 @@
 
 (reg-fx :request/logout logout-effect)
 
+(defn conform! [spec args]
+  (let [conformed (s/conform spec args)]
+    (if (= :cljs.spec/invalid conformed)
+      (throw (ex-info "conform! failed" {:spec spec
+                                         :args args
+                                         :explain-data (s/explain-data spec args)}))
+      conformed)))
+
 (defn resolve-args
   "merge data from three sources:
    - data sent in the options of the event
@@ -76,6 +84,7 @@
         args (if (map? identifier) identifier (:args opts))
         merge-opt (:merge opts)
         merger (if (coll? merge-opt) merge-opt [merge-opt])
+        spec (get-in db [:editable e-type :_meta :spec])
         defaults (get-in db [:editable e-type :_meta :defaults])
         inputs (get-in db [:editable e-type identifier :inputs])]
     ;; double arrow means reverse merge so top one wins
@@ -83,23 +92,30 @@
       (some #{:inputs} merger) (merge inputs)
       ;; only an identifier was given, options may still contain {:merge :defaults}
       (empty? args) (merge inputs)
-      (some #{:defaults} merger) (merge defaults))))
+      (some #{:defaults} merger) (merge defaults)
+      spec (conform! spec))))
 
 (defn login-handler
   "dispatch :request/login to call the client"
   [cofx event-vec]
-  (let [;; standard event-vec structure
-        args (resolve-args cofx event-vec)
-        scope (h/e-scope event-vec)
-        tap {:args args
-             :e-scope scope}
-        ;; maybe make each attribute able to be pending?
-        pending-event-vec (into scope [:state :pending true])]
-    {:dispatch pending-event-vec
-     ;; trigger the fct
-     :request/login {:args args
-                     :tap tap
-                     :client (:client cofx)}}))
+  (let [scope (h/e-scope event-vec)]
+    (try
+      (let [;; standard event-vec structure
+            args (resolve-args cofx event-vec)
+            tap {:args args
+                 :e-scope scope}
+            ;; maybe make each attribute able to be pending?
+            pending-event-vec (into scope [:state :pending true])]
+        {:dispatch pending-event-vec
+         ;; trigger the fct
+         :request/login {:args args
+                         :tap tap
+                         :client (:client cofx)}})
+      (catch js/Error e
+        ;; this is a known spec error
+        (if-let [spec-error (:explain-data (ex-data e))]
+          {:dispatch (into scope [:errors {:explain-data spec-error}])}
+          (throw e))))))
 
 (reg-event-fx
  :request/login
@@ -115,23 +131,29 @@
         e-type (if (namespace e-type) (keyword (namespace e-type)) e-type)
         ;; use updated event-vec with namespace as e-type
         new-event-vec [event-name e-type identifier opts]
-        args (resolve-args cofx new-event-vec)
-        scope (h/e-scope new-event-vec)
-        tap {:command cmd
-             :args args
-             :e-scope scope}
-        ;; maybe make each attribute able to be pending?
-        pending-event-vec (into scope [:state :pending true])]
+        scope (h/e-scope new-event-vec)]
+    (try
+      (let [args (resolve-args cofx new-event-vec)
+            tap {:command cmd
+                 :args args
+                 :e-scope scope}
+            ;; maybe make each attribute able to be pending?
+            pending-event-vec (into scope [:state :pending true])]
 
-    ;; is there an identifier?
-    ;; (if (< 2 (count scope))
-    ;; the request is finishing before this pending state gets run, which creates
-    ;; invalid data. Will probably want to use re-frame-forward-events-fx
-    ;;   (merge {:dispatch pending-event-vec}))
-    {:request/command {:command cmd
-                                :args args
-                                :tap tap
-                                :client (:client cofx)}}))
+        ;; is there an identifier?
+        ;; (if (< 2 (count scope))
+        ;; the request is finishing before this pending state gets run, which creates
+        ;; invalid data. Will probably want to use re-frame-forward-events-fx
+        ;;   (merge {:dispatch pending-event-vec}))
+        {:request/command {:command cmd
+                           :args args
+                           :tap tap
+                           :client (:client cofx)}})
+      (catch js/Error e
+        ;; this is a known spec error
+        (if-let [spec-error (:explain-data (ex-data e))]
+          {:dispatch (into scope [:errors {:explain-data spec-error}])}
+          (throw e))))))
 
 (reg-event-fx
  :request/command
@@ -172,13 +194,20 @@
   args may be resolved from `resolve-args' or sent as an event arg.
    a map as event arg will short-circuit some logic for a simpler interface"
   [cofx event-vec]
-  ;; optional standard event-vec structure
-  (let [[event-name e-type identifier opts] event-vec]
-    (if (not (map? e-type))
-      (if (map? identifier)
-        (throw (ex-info "non-standard event-vec, we have a problem" {:event-vec event-vec}))
-        (long-query-handler cofx event-vec))
-      (short-query-handler cofx event-vec))))
+  (let [scope (h/e-scope event-vec)]
+    (try
+      ;; optional standard event-vec structure
+      (let [[event-name e-type identifier opts] event-vec]
+        (if (not (map? e-type))
+          (if (map? identifier)
+            (throw (ex-info "non-standard event-vec, we have a problem" {:event-vec event-vec}))
+            (long-query-handler cofx event-vec))
+          (short-query-handler cofx event-vec)))
+      (catch js/Error e
+        ;; this is a known spec error
+        (if-let [spec-error (:explain-data (ex-data e))]
+          {:dispatch (into scope [:errors {:explain-data spec-error}])}
+          (throw e))))))
 
 (reg-event-fx
  :request/query

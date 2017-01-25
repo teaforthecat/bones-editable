@@ -47,3 +47,14 @@
 
 (defn filtering [form-type [filter-key value]]
   [:editable form-type :_meta [filter-key value]])
+
+;; spec conformer
+(defn parse-int [x]
+  (if (integer? x)
+    x
+    (if (string? x)
+      (let [n (js/parseInt x)]
+        (if (integer? n)
+          n
+          :cljs.spec/invalid))
+      :cljs.spec/invalid)))

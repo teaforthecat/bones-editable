@@ -55,6 +55,15 @@
   {:editable {:x {:y {:inputs {:b 1 :z 1}}
                   :_meta {:defaults {:z 2 :c 3}}}}})
 
+(s/def ::d (s/conformer e/parse-int))
+
+(s/def ::alphaspec (s/keys :req-un [::d]))
+
+(def xyzspec-db
+  (-> xyz-db
+      (assoc-in [:editable :x :_meta :spec] ::alphaspec)
+      (assoc-in [:editable :x :y :inputs :d] "4")))
+
 (deftest resolve-args
   ;; there are three sources of args to send to the client:
   ;;  - :_meta :defaults
@@ -98,7 +107,19 @@
   (testing " empty args and merge :inputs and defaults"
     (let [cofx {:db xyz-db}
           event-vec [:request/command :x :y {:args {}, :merge [:inputs :defaults]}]]
-      (is (= {:z 1, :c 3, :b 1} (request/resolve-args cofx event-vec))))))
+      (is (= {:z 1, :c 3, :b 1} (request/resolve-args cofx event-vec)))))
+  (testing " conforms args to spec if present in :_meta"
+    (let [cofx {:db xyzspec-db}
+          event-vec [:request/command :x :y]]
+      ;; the "4" turns in to an int 4
+      (is (= {:d 4, :z 1, :b 1}
+             (request/resolve-args cofx event-vec)))))
+  (testing " conforms args to spec if present in :_meta"
+    (let [cofx {:db (assoc-in xyzspec-db [:editable :x :y :inputs :d] "ff4notint")}
+          event-vec [:request/command :x :y]]
+      ;; the explain-data can go into the thing's :errors
+      (is (thrown-with-msg? js/Error #"conform! failed"
+             (request/resolve-args cofx event-vec))))))
 
 (defn add-inputs [db event-vec]
   (assoc-in db (h/e-scope event-vec :inputs) (:args (last event-vec))))
@@ -132,7 +153,15 @@
                                 (done))
                      new-client (assoc client :login-fn login-fn)
                      _ (request/set-client new-client)]
-                 (dispatch event-vec)))))))
+                 (dispatch event-vec))))))
+  (testing "failed conform error inserts into db"
+    (let [cofx {:db (assoc-in xyzspec-db [:editable :x :y :inputs :d] "ff4notint")}
+          event-vec [:request/login :x :y]
+          result (request/login-handler cofx event-vec)]
+      ;; the explain-data can go into the thing's :errors
+      ;; not the prettiest error message, but it can be parsed and rendered into one
+      (is (= {:dispatch [:editable :x :y :errors {:explain-data {:cljs.spec/problems '({:path [:d], :pred parse-int, :val "ff4notint", :via [:bones.editable.request-test/alphaspec :bones.editable.request-test/d], :in [:d]})}}]}
+             result)))))
 
 (deftest command-handler
   (testing "the values (command,args,tap) actually make it to the client"
@@ -159,7 +188,15 @@
                               (done))
                  new-client (assoc client :command-fn command-fn)
                  _ (request/set-client new-client)]
-             (dispatch event-vec)))))
+             (dispatch event-vec))))
+  (testing " conform failed error inserts into app-db"
+    (let [cofx {:db (assoc-in xyzspec-db [:editable :x :y :inputs :d] "ff4notint")}
+          event-vec [:request/command :x :y]
+          result (request/command-handler cofx event-vec)]
+      ;; the explain-data can go into the thing's :errors
+      ;; not the prettiest error message, but it can be parsed and rendered into one
+      (is (= {:dispatch [:editable :x :y :errors {:explain-data {:cljs.spec/problems '({:path [:d], :pred parse-int, :val "ff4notint", :via [:bones.editable.request-test/alphaspec :bones.editable.request-test/d], :in [:d]})}}]}
+             result)))))
 
 
 (deftest long-query-handler
@@ -206,7 +243,16 @@
                             (done))
                  new-client (assoc client :query-fn query-fn)
                  _ (request/set-client new-client)]
-             (dispatch event-vec)))))
+             (dispatch event-vec))))
+  ;; NOTE: I'm not totally sure this makes sense, to conform to a spec in the db when querying
+  (testing " conform failed error inserts into app-db"
+    (let [cofx {:db (assoc-in xyzspec-db [:editable :x :y :inputs :d] "ff4notint")}
+          event-vec [:request/command :x :y]
+          result (request/query-handler cofx event-vec)]
+      ;; the explain-data can go into the thing's :errors
+      ;; not the prettiest error message, but it can be parsed and rendered into one
+      (is (= {:dispatch [:editable :x :y :errors {:explain-data {:cljs.spec/problems '({:path [:d], :pred parse-int, :val "ff4notint", :via [:bones.editable.request-test/alphaspec :bones.editable.request-test/d], :in [:d]})}}]}
+             result)))))
 
 (deftest logout-handler
   (testing " with no args, the client receives the call"

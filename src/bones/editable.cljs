@@ -28,6 +28,8 @@
 (reg-event-db :editable [] editable-update-multi)
 
 ;; helpers
+(def parse-int h/parse-int)
+
 ;; forms
 (def form f/form)
 (def detect-controls f/detect-controls)
