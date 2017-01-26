@@ -230,6 +230,7 @@
                  new-client (assoc client :query-fn query-fn)
                  _ (request/set-client new-client)]
              (dispatch event-vec))))
+
   (testing " with an identifier and args and :merge :inputs; the client receives both as args"
     ;; here we insert into the db the previously mocked attributes
     (dispatch (h/e-scope [:_ :x :y] :inputs {:i 9}))
@@ -244,6 +245,7 @@
                  new-client (assoc client :query-fn query-fn)
                  _ (request/set-client new-client)]
              (dispatch event-vec))))
+
   ;; NOTE: I'm not totally sure this makes sense, to conform to a spec in the db when querying
   (testing " conform failed error inserts into app-db"
     (let [cofx {:db (assoc-in xyzspec-db [:editable :x :y :inputs :d] "ff4notint")}

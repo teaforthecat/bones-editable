@@ -5,9 +5,9 @@
 (defn detect-controls [{:keys [enter escape]}]
   (fn [keypress]
     (case (.-which keypress)
-      13 (enter)
+      13 (enter keypress)
       ;; chrome won't fire 27, so use on-blur instead
-      27 (escape)
+      27 (escape keypress)
       nil)))
 
 (defn field [e-type identifier attr html-attrs]
