@@ -52,24 +52,26 @@
   "returns function as closures around subscriptions to a single 'editable' thing in the
   db. The thing has attributes, whose current value is accessed by calling `inputs' e.g., with arguments. No arguments will return all the attributes"
   [e-type identifier]
-  (let [inputs-atom (subscribe [:editable e-type identifier :inputs])
-        state-atom (subscribe [:editable e-type identifier :state])
-        errors-atom (subscribe [:editable e-type identifier :errors])
-        defaults-atom (subscribe [:editable e-type identifier :defaults])
-        inputs (fn [& args] (get-in @inputs-atom args))
-        state (fn [& args] (get-in @state-atom args))
-        errors (fn [& args] (get-in @errors-atom args))
+  (let [scope (h/scope-with [:editable e-type identifier])
+        inputs-atom   (subscribe (scope :inputs))
+        state-atom    (subscribe (scope :state))
+        errors-atom   (subscribe (scope :errors))
+        defaults-atom (subscribe (scope :defaults))
+        inputs   (fn [& args] (get-in @inputs-atom args))
+        state    (fn [& args] (get-in @state-atom args))
+        errors   (fn [& args] (get-in @errors-atom args))
         defaults (fn [& args] (get-in @defaults-atom args))]
     {:inputs inputs
      :state  state
      :errors errors
      :defaults defaults
 
+     :scope scope
      ;; save comes loaded with conventions
      :save (partial save-fn e-type identifier)
      :delete #(dispatch (conventional-command-event e-type identifier :delete))
      :reset  #(dispatch (h/editable-reset e-type identifier (state :reset)))
      :edit   (fn [attr]
                #(dispatch [:editable
-                           [:editable e-type identifier :state :reset (inputs)]
-                           [:editable e-type identifier :state :editing attr true]]))}))
+                           (scope :state :reset (inputs))
+                           (scope :state :editing attr true)]))}))

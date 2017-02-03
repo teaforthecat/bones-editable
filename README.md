@@ -7,15 +7,25 @@ form components concise when using re-frame.
 ## About
 
 The core of this library is a standardized event vector that maps to a path in
-the app-db (e.g.: using `(get-in app-db path)`). An event can be dispatched with
-this path to get data in and a subscription can be setup with this path to get
-data out. This path holds things that are meant to be edited. These edits are
-meant to be sent to a server and persisted which entails a lifecycle of events.
-The state of this lifecycle is stored in the `:state` key which is next to
-`:inputs` and `:errors`. `:errors` can be populated from the client when inputs
-don't conform to a spec, or in a response handler when the server responds with
-an error code. It is then up to the component to subscribe to these errors and 
-render them to the user.
+the app-db, e.g.: 
+
+    (get-in app-db path)
+    
+An event can be dispatched with this path to get data in, also, a subscription
+can be registered with this path to get data out. This path holds things that are
+meant to be edited. These edits are meant to be sent to a server and persisted
+which entails a lifecycle of events. The state of this lifecycle is stored in
+the `:state` key which is next to `:inputs` and `:errors`. Together they look
+like this in the db:
+
+    {:editable {:typeX {"id-of-X" {:inputs {}
+                                   :errors {}
+                                   :state  {}}}}}
+
+
+`:errors` can be populated when inputs don't conform to a spec, or when the
+server responds with an error code. It is then up to the component to subscribe
+to these errors and render them to the user.
 
 We can encapsulate this standardized event vector in closure functions, which
 look pretty in hiccup. Here is what an "editable" form looks like with these
@@ -36,10 +46,12 @@ encapsulation. This also shows the paths that were mentioned above.
       [:input :class "form-control"
               :value (:username @inputs)
               :on-change #(dispatch-sync [:editable :login :new :inputs :username ( -> % .-target .-value)])]
-      [:button {:on-click #(dispatch [:request/command :login :new {:args @inputs}])}]
-    
-    )
+      [:button {:on-click #(dispatch [:request/command :login :new {:args @inputs}])}])
 
+
+The `:login` key here is serving as the type and the `:new` key is serving as an
+identifier. This identifier doesn't need to be a number because there is
+generally never more than one login form. 
 
 ## Configure the Client
 
@@ -139,8 +151,8 @@ The merge will need to be declared in the dispatch call.
                    {:args attrs :merge [:defaults :inputs]}])))
 
 This function doesn't actually perform the request, the registered effect
-`request/command`: does. This is part of the library and we don't have to worry
-about that here. We do need to set the client though; see below.
+`request/command`: does. That effect will call the client that was registered as
+a cofx above.
   
 - `(dispatch [:request/command command-name args])`
 

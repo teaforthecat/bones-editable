@@ -5,15 +5,14 @@
 (defn scope-with [scope]
   (fn [& args] (into scope args)))
 
-(defn e-scope [event-vec & sub]
+(defn e-scope
+  "builds a standard event-vec form another event-vec.
+  eases the transitions from :request/commnd to :editable event for example"
+  [event-vec & sub]
   ;; standard event-vec structure
-  (let [[event-name e-type identifier opts] event-vec]
-    (if (and (keyword? e-type)
-             (or (uuid? identifier)
-                 ;; I think this should only be the :new keyword
-                 (keyword? identifier)))
-      (into [:editable e-type identifier] sub)
-      [:editable e-type])))
+  (let [[event-name e-type identifier opts] event-vec
+        _identifier (if (map? identifier) (:identifier opts) identifier)]
+    (into [:editable e-type _identifier] sub)))
 
 (defn editable-reset
   ([[_ etype identifier inputs]]

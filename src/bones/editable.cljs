@@ -44,6 +44,7 @@
 (def query p/query)
 
 ;; request
+(def set-client request/set-client)
 ;; response
 (def handler response/handler)
 ;; subs
