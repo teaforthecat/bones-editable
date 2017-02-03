@@ -1,7 +1,7 @@
 # bones-editable
 _This project is in review state. Please check it out and leave comments._
 
-A Clojure library that is part of the bones project. It helps to keep reagent
+A ClojureScript library that is part of the [bones](https://github.com/teaforthecat/bones) project. It helps to keep reagent
 form components concise when using re-frame. 
 
 ## About
@@ -61,6 +61,7 @@ In early development a web app can be built with full interaction without a
 server by using Local Storage. There are two ways to hook up the Local Storage client:
 
      (require '[bones.editable :as e])
+     (require '[bones.editable.local-storage :as e.ls])
 
      ;; 1) on initialize
      (re-frame/reg-event-db
