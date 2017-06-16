@@ -14,7 +14,7 @@
   ;; sort must be an array of :key,comparator like:
   ;; [:id >] or [:id :asc] or [:abc :desc]
   (let [[sort-key order] sorting
-        ;; provide sort-cut, or use given fn
+        ;; provide short-cut, or use given fn
         sort-order (get {:asc < :desc >} order order)
         sort-key-fn (fn [[identifier thing]]
                       (get-in thing [:inputs sort-key]))]

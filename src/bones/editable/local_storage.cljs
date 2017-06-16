@@ -14,6 +14,7 @@
 (defn local-set-item [prefix form-type value]
   (.setItem js/localStorage (local-key prefix form-type) (pr-str value)))
 
+;; this is where we establish the action-command naming convention
 (defmulti take-action identity)
 
 (defmethod take-action "new"
@@ -36,6 +37,7 @@
 ;; but it will be weird if the commands used here(new,update, etc.) don't exist on the server
 ;; any command will store the e-type(given or derived) collection under it's name
 ;; serialized with pr-str and read-string
+;; this would be a good place for internationalization
 (defrecord LocalStorage [prefix]
   p/Client
   (login [client args tap]
@@ -45,6 +47,7 @@
   (command [client cmd args tap]
     (try
       (let [cmdspace (or (namespace cmd) (:e-type tap))
+            ;; this is where we establish the action-command naming convention
             action (name cmd)
             many? (and (not (map? args)) (iterable? args))]
         (cond

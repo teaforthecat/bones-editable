@@ -2,11 +2,15 @@
   (:require [re-frame.core :as re-frame :refer [reg-event-fx inject-cofx]]
             [bones.editable.helpers :as h]))
 
+;; TODO: provide api for configuring these (in addidion to defmethod)
+;; something like (add-error-handler 500 :error-message "The server blew up on that request")
 ;; these are workable (if not sensible) defaults
 ;; they are meant to be overridden by redefining a method using defmethod
 
 (def debug (if js/goog.DEBUG re-frame/debug))
 
+;; the api for receiving responses and events with one function
+;; the api for routing responses and events
 (defmulti handler
    (fn [db [channel revent & [status tap]]]
     (condp = (namespace channel)
@@ -57,6 +61,7 @@
   [{:keys [db]} [channel response status tap]]
   (tap-error tap response))
 
+;; 0 provided by the browser, it is when the server isn't even running
 (defmethod handler [:response/login 0]
   [{:keys [db]} [channel response status tap]]
   (tap-error tap response))
@@ -117,5 +122,13 @@
 
 ;; hook up the response handlers
 (doseq [channel (handler-channels)]
+  ;; set up handler for dispatching
+  ;; tell reframe to dispatch these events to handler:
+  ;; :response/login
+  ;; :response/logout
+  ;; :response/command
+  ;; :response/query
+  ;; :event/client-status
+  ;; :event/message
   ;; client to start and stop it on login and logout
   (reg-event-fx channel [debug (inject-cofx :client)] handler))

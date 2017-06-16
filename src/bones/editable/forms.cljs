@@ -44,6 +44,7 @@
      ;; it's an event so act on it
      (dispatch (conj (conventional-command-event e-type identifier) {}))
      ;; else its opts so return another function to handle the click event
+     ;; this is to provide a pretty api
      (fn [event]
        (let [opts (if (fn? event-or-opts) (event-or-opts) event-or-opts)]
          (dispatch (conj (conventional-command-event e-type identifier) opts)))))))

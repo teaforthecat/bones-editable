@@ -107,7 +107,7 @@
             ;; maybe make each attribute able to be pending?
             pending-event-vec (into scope [:state :pending true])]
         {:dispatch pending-event-vec
-         ;; trigger the fct
+         ;; trigger the fx
          :request/login {:args args
                          :tap tap
                          :client (:client cofx)}})
@@ -184,7 +184,7 @@
         ;; maybe make each attribute able to be pending?
         pending-event-vec (into scope [:state :pending true])]
     {:dispatch pending-event-vec
-     ;; trigger the fct
+     ;; trigger the fx
      :request/query {:args args
                      :tap tap
                      :client (:client cofx)}}))
