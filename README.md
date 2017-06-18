@@ -3,7 +3,7 @@ _This project is in review state. Please check it out and leave comments._
 
 A ClojureScript library that is part of the [bones](https://github.com/teaforthecat/bones) project. It helps to keep reagent
 form components concise when using re-frame. Here is a demo:
-https://youtu.be/FGH2KlN0wrg
+https://youtu.be/dGQRDSRACB4
 
 ## About
 
