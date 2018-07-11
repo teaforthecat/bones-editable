@@ -7,40 +7,63 @@ https://youtu.be/dGQRDSRACB4
 
 ## About
 
-The core of this library is a standardized event vector that maps to a path in
+The core concept of this library is a standardized event vector that maps to a path in
 the app-db, e.g.: 
 
     (get-in app-db path)
     
-An event can be dispatched with this path to get data in, also, a subscription
-can be registered with this path to get data out. This path holds things that are
-meant to be edited. These edits are meant to be sent to a server and persisted
-which entails a lifecycle of events. The state of this lifecycle is stored in
-the `:state` key which is next to `:inputs` and `:errors`. Together they look
-like this in the db:
+An event can be dispatched with this path to get data into the db and a
+subscription can be registered with this path to get data out. This path holds
+things that are meant to be edited. These edits are meant to be sent to a server
+and persisted which entails a lifecycle of events. The values and meta data about
+these edits are stored in the db, which looks like this:
 
-    {:editable {:typeX {"id-of-X" {:inputs {}
-                                   :errors {}
-                                   :state  {}}}}}
+```clojure 
+{:editable {:typeX {"id-of-X" {:inputs {}
+                               :errors {}
+                               :state  {}}
+                     ;; optional
+                     :_meta {:spec ::typeX
+                             :defaults {}}}}}
+```
 
+`:inputs` are the form values. This is the form state stored in the app-db.
+Basically the theory is that a human moves very slow so their inputs, even when
+typing, do not pose a performance concern. The goal of this project is to
+support the majority of user inputs as much as possible and I believe that this
+works quite well. 
 
 `:errors` can be populated when inputs don't conform to a spec, or when the
 server responds with an error code. It is then up to the component to subscribe
 to these errors and render them to the user.
 
-We can encapsulate this standardized event vector in closure functions, which
+`:state` It would be nice to generalize the states that forms go through and provide
+a customizable state machine. That hasn't been done yet though, so this key only
+holds the keyword :pending during a request. This can be used to show a spinner.
+
+`:_meta` Keeping the descriptions of the things next to the things can be nice.
+If you provide a clojure.spec under `:spec`, the inputs will be conformed before
+sending them to the server and spec problems will show up in `:errors`.
+`:defaults` can be set to send along with form submissions, see below. 
+
+# Forms
+
+We can use the path mentioned above in closure functions, which
 look pretty in hiccup. Here is what an "editable" form looks like with these
 closures:
 
-    (let [{:keys [reset save errors]} (e/form :login :new)]
-      [:span.errors (errors :username)]
-      [e/input :login :new :username :class "form-control"] ;;=> <input class="form-control"...
-      [:button {:on-click save}] ;;=> submit to server
-      ) 
+```clojure
+ (let [{:keys [reset save errors]} (e/form :login :new)]
+   [:span.errors (errors :username)]
+   [e/input :login :new :username :class "form-control"] ;;=> <input class="form-control"...
+   [:button {:on-click save}] ;;=> submit to server
+   ) 
+```
 
 Nice and tidy right? Here is what the component would look like without the
-encapsulation. This also shows the paths that were mentioned above.
+closures. This also shows the paths that were mentioned above.
 
+```clojure
     (let [inputs (subscribe [:editable :login :new :inputs])
           errors (subscribe [:editable :login :new :errors])]
       [:span.errors (:username @errors)]
@@ -48,57 +71,37 @@ encapsulation. This also shows the paths that were mentioned above.
               :value (:username @inputs)
               :on-change #(dispatch-sync [:editable :login :new :inputs :username ( -> % .-target .-value)])]
       [:button {:on-click #(dispatch [:request/command :login :new {:args @inputs}])}])
-
+```
 
 The `:login` key here is serving as the type and the `:new` key is serving as an
-identifier. This identifier doesn't need to be a number because there is
-generally never more than one login form. 
+identifier. Here, the identifier can be a simple symbol because there is only
+one login form, but other types could have many identifiers. 
 
-## Configure the Client
+## Client
 
-- using local storage
+This project does not have an HTTP client. A client must be configured, or
+plugged in. (see:
+[bones.client]("https://github.com/teaforthecat/bones-client")) This is done
+with a protocol and a reframe-cofx handler:
 
-In early development a web app can be built with full interaction without a
-server by using Local Storage. There are two ways to hook up the Local Storage client:
+```clojure
+;; Extend the Client protocol like so:
+(extend-type other/Client
+  e/Client
+  (e/login [cmp args tap]
+    (other/login cmp args tap))
+  (e/logout [cmp tap]
+    (other/logout cmp tap))
+  (e/command [cmp cmd args tap]
+    (other/command cmp cmd args tap))
+  (e/query [cmp args tap]
+    (other/query cmp args tap)))
 
-     (require '[bones.editable :as e])
-     (require '[bones.editable.local-storage :as e.ls])
-
-     ;; 1) on initialize
-     (re-frame/reg-event-db
-       :initialise-db
-       (fn [_ _]
-         (e/set-client (e.ls/LocalStorage. "app-name-prefix") )
-         default-value))
-
-     ;; 2) override cofx
-    (re-frame/reg-cofx 
-      :client
-      #(assoc % :client (e.ls/LocalStorage. "app-name-prefix"))) 
+;; then on initialization of the app, set the cofx handler:
+(e/set-client (other/Client. some-config))
     
-    
-     
-- swapping out bones.client or other
+```
 
-Then when the app has blossomed it can receive a real client to talk to a
-server.
-
-First extend the Client:
-
-    (extend-type other/Client
-      e/Client
-      (e/login [cmp args tap]
-        (other/login cmp args tap))
-      (e/logout [cmp tap]
-        (other/logout cmp tap))
-      (e/command [cmp cmd args tap]
-        (other/command cmp cmd args tap))
-      (e/query [cmp args tap]
-        (other/query cmp args tap)))
-   
-    ;; then on initialize
-    (e/set-client (other/Client. some-config))
-    
 
 ## Responses
 
@@ -116,47 +119,53 @@ from a WebSocket connection or SSE channel. The other responses will result
 in data being created in the app-db under the `:error` key in the editable
 thing, which can be subscribed to and rendered.
 
-
-- `(defmethod e/handler [:response/command 200])`
+```clojure
+(defmethod e/handler [:response/command 200]
+  [{:keys [db]} [_ response-body]]
+  (dispatch [:hurray :success response-body]))
+```
 
 ## Events
 
-- `(defmethod e/handler :event/message)`
-
+```clojure 
+(defmethod e/handler :event/message
+  [{:keys [db]} [channel message]]
+  (dispatch [:wow :another message])))
+```
 
 
 ## Requests
 
-Requests can be created separately from forms.
-Let's create a function that will send data to the server. It will draw data
-from three sources. 
-  
-  - user inputs (app-db)
-  - e-type defaults (:_meta in app-db)
-  - parameter args when called (direct)
-  
-The merge will need to be declared in the dispatch call.
+The `:request/command` event handler is loaded automatically. It is a very flexible
+way to send data to the server outside of the forms.
 
-    (defn create [e-type attrs]
-      (let [command (keyword e-type :create)
-            identifier :new]
-        (dispatch [:request/command
+Here is a dispatch that will send only the value of the `:args` option:
+```clojure
+(dispatch [:request/command :command/name nil {:args {:abc 123}}])
+```
 
-                   ;; the namespace command is the e-type which holds
-                      :_meta (which holds :defaults)
+Here is a dispatch that will pull data from the db, which is the form values for
+the editable thing with type :abc and id 123:
 
-                   command
-                   ;; :new is part of e-type and holds :inputs (user inputs)
-                   identifier 
-                   ;; with this the client will receive:
-                   ;; {:command command :args (merge defaults attrs inputs)}
-                   {:args attrs :merge [:defaults :inputs]}])))
+```clojure
+(dispatch [:request/command :abc 123])
+```
 
-This function doesn't actually perform the request, the registered effect
-`request/command`: does. That effect will call the client that was registered as
-a cofx above.
-  
-- `(dispatch [:request/command command-name args])`
+Here is a dispatch that will merge the form inputs into some defaults (defaults are
+in the db under the path: `[:editable :abc :_meta :defaults]`):
+
+```clojure
+(dispatch [:request/command :abc 123 {:merge [:inputs :defaults]}])
+
+```
+
+You may wan to send a computed value along with form inputs and defaults. To do
+this use the merge option like so:
+````clojure
+(dispatch [:request/command :abc 123 {:args {:xyz (+ 4 5)}
+                                      :merge [:inputs :defaults]}])
+```
+
 
 
 ## License

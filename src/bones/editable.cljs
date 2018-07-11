@@ -17,7 +17,7 @@
   (assoc-in db (into [:editable form-type id] (butlast args)) (last args)))
 
 (defn editable-update-multi
-  "update the db multiple times if a vector of events are given"
+  "update the db multiple times if a vector of events are given - like a transaction"
   [db [channel & events]]
   (if (iterable? (first events))
     ;; we have multiple events
