@@ -1,7 +1,7 @@
 (ns bones.editable.request-test
   (:require-macros [cljs.core.async.macros :refer [go go-loop]])
   (:require [cljs.test :as t :refer-macros [deftest testing is async]]
-            [cljs.spec :as s]
+            [cljs.spec.alpha :as s]
             [re-frame.core :as re-frame :refer [dispatch dispatch-sync reg-event-db reg-event-fx reg-fx]]
             [bones.editable :as e]
             [bones.editable.request :as request]
@@ -160,7 +160,7 @@
           result (request/login-handler cofx event-vec)]
       ;; the explain-data can go into the thing's :errors
       ;; not the prettiest error message, but it can be parsed and rendered into one
-      (is (= {:dispatch [:editable :x :y :errors {:explain-data {:cljs.spec/problems '({:path [:d], :pred parse-int, :val "ff4notint", :via [:bones.editable.request-test/alphaspec :bones.editable.request-test/d], :in [:d]})}}]}
+      (is (= '{:dispatch [:editable :x :y :errors {:explain-data {:cljs.spec.alpha/problems ({:path [:d], :pred (cljs.spec.alpha/conformer bones.editable/parse-int), :val "ff4notint", :via [:bones.editable.request-test/alphaspec :bones.editable.request-test/d], :in [:d]}), :cljs.spec.alpha/spec :bones.editable.request-test/alphaspec, :cljs.spec.alpha/value {:b 1, :z 1, :d "ff4notint"}}}]}
              result)))))
 
 (deftest command-handler
@@ -195,7 +195,7 @@
           result (request/command-handler cofx event-vec)]
       ;; the explain-data can go into the thing's :errors
       ;; not the prettiest error message, but it can be parsed and rendered into one
-      (is (= {:dispatch [:editable :x :y :errors {:explain-data {:cljs.spec/problems '({:path [:d], :pred parse-int, :val "ff4notint", :via [:bones.editable.request-test/alphaspec :bones.editable.request-test/d], :in [:d]})}}]}
+      (is (= '{:dispatch [:editable :x :y :errors {:explain-data {:cljs.spec.alpha/problems ({:path [:d], :pred (cljs.spec.alpha/conformer bones.editable/parse-int), :val "ff4notint", :via [:bones.editable.request-test/alphaspec :bones.editable.request-test/d], :in [:d]}), :cljs.spec.alpha/spec :bones.editable.request-test/alphaspec, :cljs.spec.alpha/value {:b 1, :z 1, :d "ff4notint"}}}]}
              result)))))
 
 
@@ -253,7 +253,7 @@
           result (request/query-handler cofx event-vec)]
       ;; the explain-data can go into the thing's :errors
       ;; not the prettiest error message, but it can be parsed and rendered into one
-      (is (= {:dispatch [:editable :x :y :errors {:explain-data {:cljs.spec/problems '({:path [:d], :pred parse-int, :val "ff4notint", :via [:bones.editable.request-test/alphaspec :bones.editable.request-test/d], :in [:d]})}}]}
+      (is (= '{:dispatch [:editable :x :y :errors {:explain-data {:cljs.spec.alpha/problems ({:path [:d], :pred (cljs.spec.alpha/conformer bones.editable/parse-int), :val "ff4notint", :via [:bones.editable.request-test/alphaspec :bones.editable.request-test/d], :in [:d]}), :cljs.spec.alpha/spec :bones.editable.request-test/alphaspec, :cljs.spec.alpha/value {:b 1, :z 1, :d "ff4notint"}}}]}
              result)))))
 
 (deftest logout-handler

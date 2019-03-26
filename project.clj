@@ -4,8 +4,8 @@
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.8.0"]
-                 [org.clojure/clojurescript "1.9.229"]
-                 [re-frame "0.9.1"]]
+                 [org.clojure/clojurescript "1.10.516"]
+                 [re-frame "0.10.6"]]
 
   :profiles {:dev {
                    :source-paths ["src" "test" "dev"]
@@ -22,6 +22,7 @@
   :test-paths ["test"]
 
   :doo {;:debug true
+        :alias {:default [:firefox]}
         :build "test"}
 
   :cljsbuild {:builds

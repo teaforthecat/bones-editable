@@ -3,7 +3,7 @@
             [re-frame.core :as re-frame :refer [reg-fx reg-cofx reg-event-fx inject-cofx]]
             [bones.editable.protocols :as p]
             [bones.editable.helpers :as h]
-            [cljs.spec :as s]))
+            [cljs.spec.alpha :as s]))
 
 
 (def debug (if js/goog.DEBUG re-frame/debug))
@@ -59,7 +59,7 @@
 
 (defn conform! [spec args]
   (let [conformed (s/conform spec args)]
-    (if (= :cljs.spec/invalid conformed)
+    (if (= :cljs.spec.alpha/invalid conformed)
       (throw (ex-info "conform! failed" {:spec spec
                                          :args args
                                          :explain-data (s/explain-data spec args)}))

@@ -1,7 +1,7 @@
 (ns bones.editable.response-test
   (:require-macros [cljs.core.async.macros :refer [go go-loop]])
   (:require [cljs.test :as t :refer-macros [deftest testing is async]]
-            [cljs.spec :as s]
+            [cljs.spec.alpha :as s]
             [cljs.core.async :as a]
             [re-frame.core :as re-frame :refer [dispatch dispatch-sync]]
             [bones.editable.response :as response]))

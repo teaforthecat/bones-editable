@@ -55,5 +55,5 @@
       (let [n (js/parseInt x)]
         (if (integer? n)
           n
-          :cljs.spec/invalid))
-      :cljs.spec/invalid)))
+          :cljs.spec.alpha/invalid))
+      :cljs.spec.alpha/invalid)))

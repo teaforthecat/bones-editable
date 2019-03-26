@@ -1,6 +1,6 @@
 (ns bones.editable.subs-test
   (:require [cljs.test :as t :refer-macros [deftest testing is async]]
-            [cljs.spec :as s]
+            [cljs.spec.alpha :as s]
             [bones.editable.subs :as subs]))
 
 (deftest subscription

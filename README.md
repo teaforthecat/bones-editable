@@ -167,6 +167,20 @@ this use the merge option like so:
 ```
 
 
+## Testing in the browser
+Install karma and headless chrome
+
+```
+npm install -g karma-cli
+npm install karma karma-cljs-test karma-chrome-launcher --save-dev
+```
+
+And then run your tests
+
+```
+lein clean
+lein doo chrome-headless test once
+```
 
 ## License
 
