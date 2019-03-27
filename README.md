@@ -1,4 +1,5 @@
 # bones-editable
+![build-status](https://api.travis-ci.org/teaforthecat/bones-editable.svg?branch=master)
 _This project is in review state. Please check it out and leave comments._
 
 A ClojureScript library that is part of the [bones](https://github.com/teaforthecat/bones) project. It helps to keep reagent
@@ -161,7 +162,7 @@ in the db under the path: `[:editable :abc :_meta :defaults]`):
 
 You may wan to send a computed value along with form inputs and defaults. To do
 this use the merge option like so:
-````clojure
+```clojure
 (dispatch [:request/command :abc 123 {:args {:xyz (+ 4 5)}
                                       :merge [:inputs :defaults]}])
 ```
