@@ -1,5 +1,5 @@
 (ns bones.editable.response
-  (:require [re-frame.core :as re-frame :refer [reg-event-fx inject-cofx]]
+  (:require [re-frame.core :as re-frame :refer [reg-event-fx inject-cofx reg-fx]]
             [bones.editable.helpers :as h]))
 
 ;; TODO: provide api for configuring these (in addidion to defmethod)
@@ -132,3 +132,5 @@
   ;; :event/message
   ;; client to start and stop it on login and logout
   (reg-event-fx channel [debug (inject-cofx :client)] handler))
+
+(reg-fx :log #(.log js/console %))

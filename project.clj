@@ -16,7 +16,7 @@
                                   ]
                    :plugins [[lein-cljsbuild "1.1.4"]
                              [lein-figwheel "0.5.4-3"]
-                             [lein-doo "0.1.7"]]}}
+                             [lein-doo "0.1.8"]]}}
 
   :source-paths ["src"]
   :test-paths ["test"]
