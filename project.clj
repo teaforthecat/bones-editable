@@ -1,4 +1,4 @@
-(defproject bones/editable "0.1.4"
+(defproject bones/editable "0.1.5"
   :description "lifecycle events for forms using re-frame"
   :url "https://github.com/teaforthecat/bones-editable"
   :license {:name "Eclipse Public License"
